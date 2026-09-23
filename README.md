@@ -84,6 +84,15 @@ You need **Node.js**. Install the free "LTS" version from https://nodejs.org.
 3. Go to **Tools → Insert / update answer key**.
 4. Print the **Student copy**. Then switch to the **Teacher copy** and print a mark scheme with the answers shown in red.
 
+## Working in its own window
+
+Click the **⧉** button at the top of the panel to open Worksheet Builder in its own window. You can move the window to another screen and resize it, and it uses the extra space for wider layouts. You can keep typing in your document while it's open.
+
+- **Keep the Word panel open.** Office only lets the panel change your document, so the window sends every change through it. If you close the panel, the window loses its link to the document. You can drag the panel narrow.
+- **Going back to the panel:** click **⇲ Dock** in the window, or just close the window.
+- **Always open in a window:** go to **Tools → Layout** and tick **Always open Worksheet Builder in its own window**.
+- This needs Microsoft 365 or Word 2021 or later.
+
 ## Templates, designs and colours
 
 A **template** is the starting point for a type of worksheet. The **base design** is the layout, and the **colour scheme** is applied on top of it, so every combination works:
@@ -213,6 +222,8 @@ web/ooxml.js         layout engine: styles, questions, tick boxes, answer key
 web/ai.js            AI services: Claude, Gemini, NotebookLM and Chalkie
 web/templates.js     template catalogue, base designs and colour schemes
 web/docs.js          reads scheme-of-work files (Word, PowerPoint, Excel, text)
+web/docops.js        every change to the Word document (used by the panel and the pop-out window)
+web/bridge.js        link between the pop-out window and the panel
 web/vendor/          fflate unzip library (MIT licence)
 examples/            sample worksheets, a lesson pack and the design gallery
 web/taskpane.css     panel look

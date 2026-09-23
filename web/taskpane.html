@@ -10,8 +10,20 @@
 <body>
   <header class="app-head">
     <div class="brand"><img src="assets/icon-32.png" alt="" /> Worksheet Builder</div>
-    <div class="mode" id="modeBadge" title="Switch between the student and teacher copies in Tools">Student copy</div>
+    <div class="hdr-right">
+      <div class="mode" id="modeBadge" title="Switch between the student and teacher copies in Tools">Student copy</div>
+      <button class="hdr-btn hidden" id="popBtn" title="Open in its own window">⧉</button>
+    </div>
   </header>
+
+  <div id="popOverlay" class="pop-overlay hidden">
+    <div class="pop-card">
+      <div class="pop-ico">⧉</div>
+      <b>Worksheet Builder is open in its own window</b>
+      <p>Keep this panel open – it’s the link between the window and your document. You can drag it narrower.</p>
+      <button class="primary" id="popBack">Bring it back here</button>
+    </div>
+  </div>
 
   <nav class="tabs" role="tablist">
     <button role="tab" data-tab="templates" class="active">Templates</button>
@@ -416,6 +428,7 @@
         <label class="field">Writing lines <input type="number" id="tLines" value="5" min="1" max="40" /></label>
         <div class="field"><span>&nbsp;</span><button class="secondary" id="tLinesBtn">Insert</button></div>
       </div>
+      <label class="check"><input type="checkbox" id="autoPopout" /> Always open Worksheet Builder in its own window</label>
       <label class="field">New content goes
         <select id="insertAt">
           <option value="cursor">At the cursor</option>
@@ -498,6 +511,8 @@
 
   <script src="vendor/fflate.min.js"></script>
   <script src="ooxml.js"></script>
+  <script src="docops.js"></script>
+  <script src="bridge.js"></script>
   <script src="docs.js"></script>
   <script src="ai.js"></script>
   <script src="templates.js"></script>

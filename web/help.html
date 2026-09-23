@@ -84,6 +84,15 @@ You need **Node.js**. Install the free &quot;LTS&quot; version from https://node
 3. Go to **Tools → Insert / update answer key**.
 4. Print the **Student copy**. Then switch to the **Teacher copy** and print a mark scheme with the answers shown in red.
 
+## Working in its own window
+
+Click the **⧉** button at the top of the panel to open Worksheet Builder in its own window. You can move the window to another screen and resize it, and it uses the extra space for wider layouts. You can keep typing in your document while it&#x27;s open.
+
+- **Keep the Word panel open.** Office only lets the panel change your document, so the window sends every change through it. If you close the panel, the window loses its link to the document. You can drag the panel narrow.
+- **Going back to the panel:** click **⇲ Dock** in the window, or just close the window.
+- **Always open in a window:** go to **Tools → Layout** and tick **Always open Worksheet Builder in its own window**.
+- This needs Microsoft 365 or Word 2021 or later.
+
 ## Templates, designs and colours
 
 A **template** is the starting point for a type of worksheet. The **base design** is the layout, and the **colour scheme** is applied on top of it, so every combination works:
@@ -195,6 +204,8 @@ You can use `**bold**` and `*italic*` anywhere.
 
 ## Good to know
 
+- **An add-in is missing from SHARED FOLDER, shows an old version, or keeps disappearing from the ribbon:** close Word and run `./tools/reset-addin-cache.ps1`. It checks your catalog settings and manifests, then clears Word&#x27;s add-in cache. Reopen Word, go to **Home → Add-ins → Advanced → SHARED FOLDER**, click **Refresh**, and add each add-in once.
+
 - Each question is a Word **content control**, which shows as a thin box when you click in it. You can move questions around freely, then click **Renumber &amp; update totals**.
 - To change a question, click inside it and choose **Tools → Edit in wizard**. Text you type directly inside a question box is replaced when you switch between the student and teacher copies or apply a new style. Text you type outside the question boxes is never touched.
 - The question data is saved inside the .docx file, so you can reopen and edit a worksheet later, or on another computer.
@@ -211,11 +222,14 @@ web/ooxml.js         layout engine: styles, questions, tick boxes, answer key
 web/ai.js            AI services: Claude, Gemini, NotebookLM and Chalkie
 web/templates.js     template catalogue, base designs and colour schemes
 web/docs.js          reads scheme-of-work files (Word, PowerPoint, Excel, text)
+web/docops.js        every change to the Word document (used by the panel and the pop-out window)
+web/bridge.js        link between the pop-out window and the panel
 web/vendor/          fflate unzip library (MIT licence)
 examples/            sample worksheets, a lesson pack and the design gallery
 web/taskpane.css     panel look
 server.js            local HTTPS server (npm start)
 tools/set-url.js     makes manifest-hosted.xml for a hosted copy
+tools/reset-addin-cache.ps1  checks your add-in catalogs and clears Word&#x27;s add-in cache
 push.ps1             creates the GitHub repo, publishes to GitHub Pages, pushes updates
 .github/workflows/   GitHub Actions workflow that publishes the web folder
 ```

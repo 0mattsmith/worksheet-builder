@@ -6,28 +6,31 @@
   const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
   let inWord = false;
+  const POPOUT = /[?&]window=1(&|$)/.test(location.search); // running in the pop-out window
+  let bridge = null;       // pop-out window: link to the task pane
+  let hostWin = null;      // task pane: the open pop-out window
+  let apiSets = {};        // Word API versions supported
+  let docHeader = null;    // header saved in the document
   let theme = null;        // current house style
   let questions = {};      // id -> question data (saved inside the document)
   let lessons = {};        // id -> lesson page data (lesson packs)
   let mode = 'student';    // student | teacher
-  const memDoc = {};       // fallback when not running inside Word
 
   // ---------------- storage ----------------
   const local = {
     get(k, d) { try { const v = localStorage.getItem('ws.' + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem('ws.' + k, JSON.stringify(v)); } catch (e) { /* ignore */ } },
   };
-  const docStore = {
-    get(k, d) {
-      if (!inWord) return memDoc[k] != null ? memDoc[k] : d;
-      const v = Office.context.document.settings.get(k);
-      return v == null ? d : v;
-    },
-    set(k, v) { if (!inWord) memDoc[k] = v; else Office.context.document.settings.set(k, v); },
-    save() {
-      return new Promise((res) => { if (!inWord) return res(); Office.context.document.settings.saveAsync(() => res()); });
+  // All document work goes through WSDocOps – directly in the task pane, via the task pane in the pop-out window.
+  const canEdit = () => inWord || (POPOUT && !!bridge);
+  const Doc = {
+    call(op, args) {
+      if (POPOUT) return bridge ? bridge.call(op, args || {}) : Promise.reject(new Error('This window has lost its link to Word. Close it and open it again from the Worksheet Builder panel.'));
+      if (!inWord) return Promise.reject(new Error('Open this pane inside Word to insert content.'));
+      return window.WSDocOps[op](args || {});
     },
   };
+  const persist = (partial) => (canEdit() ? Doc.call('save', partial) : Promise.resolve(true));
   const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const clone = (o) => JSON.parse(JSON.stringify(o));
 
@@ -57,10 +60,11 @@
     return m;
   }
   function needWord() {
-    if (!inWord) { toast('Preview only – open this add-in inside Word to insert.', true); return false; }
-    return true;
+    if (canEdit()) return true;
+    toast(POPOUT ? 'This window has lost its link to Word – close it and open it again from the panel.' : 'Preview only – open this add-in inside Word to insert.', true);
+    return false;
   }
-  const isSet = (v) => inWord && Office.context.requirements.isSetSupported('WordApi', v);
+  const isSet = (v) => !!apiSets[v];
 
   // ---------------- tabs ----------------
   document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
@@ -72,179 +76,29 @@
   // =====================================================================
   //  Word operations
   // =====================================================================
-  const pkg = (xml) => WS.wrapPackage(xml, theme);
-
-  async function findAncestor(ctx, range, match) {
-    let cc = range.parentContentControlOrNullObject;
-    cc.load('tag,isNullObject');
-    await ctx.sync();
-    for (let depth = 0; depth < 6 && !cc.isNullObject; depth++) {
-      if (match(cc.tag || '')) return cc;
-      const parent = cc.parentContentControlOrNullObject;
-      parent.load('tag,isNullObject');
-      await ctx.sync();
-      cc = parent;
-    }
-    return null;
-  }
-  const isBlockTag = (t) => t.startsWith('ws-q:') || t === 'ws-header' || t === 'ws-key';
-
-  // Insert a chunk of worksheet at the cursor (or end of document), never inside another question.
   async function insertXml(xml, whereOverride) {
-    const where = whereOverride || local.get('insertAt', 'cursor');
-    await Word.run(async (ctx) => {
-      let range;
-      if (where === 'end') {
-        range = ctx.document.body.insertOoxml(pkg(xml), 'End');
-      } else {
-        let sel = ctx.document.getSelection();
-        sel.load('isEmpty');
-        await ctx.sync();
-        const anc = await findAncestor(ctx, sel, isBlockTag);
-        if (anc) {
-          const p = anc.insertParagraph('', 'After');
-          range = p.insertOoxml(pkg(xml), 'Replace');
-        } else {
-          if (!sel.isEmpty) sel = sel.getRange('End');
-          range = sel.insertOoxml(pkg(xml), 'Replace');
-        }
-      }
-      await ctx.sync();
-      try { range.getRange('End').select(); await ctx.sync(); } catch (e) { /* cursor placement is optional */ }
-    });
+    await Doc.call('insertXml', { xml, where: whereOverride || local.get('insertAt', 'cursor'), theme });
   }
 
-  // Renumber questions (restarting at each lesson), update total marks, refresh the answer key.
+  // Renumber questions, update totals and the answer key (also saves the question data in the document).
   async function refreshDoc() {
-    if (!inWord) return { count: 0, total: 0, lessons: 0, header: false };
-    let result = { count: 0, total: 0, lessons: 0, header: false };
-    await Word.run(async (ctx) => {
-      const ccs = ctx.document.body.contentControls;
-      ccs.load('items/tag');
-      await ctx.sync();
-      const seen = new Set();
-      const entries = [];
-      let keyCc = null, header = false, lessonCount = 0;
-      const totals = [];
-      ccs.items.forEach((cc) => {
-        const tag = cc.tag || '';
-        if (tag.startsWith('ws-q:')) {
-          let id = tag.slice(5);
-          if (seen.has(id) && questions[id]) { // copied question → give it its own identity
-            const nid = newId();
-            questions[nid] = Object.assign(clone(questions[id]), { id: nid });
-            cc.tag = 'ws-q:' + nid;
-            id = nid;
-          }
-          seen.add(id);
-          const nums = cc.contentControls.getByTag('ws-num');
-          nums.load('items');
-          entries.push({ id, nums });
-        } else if (tag.startsWith('ws-lesson:')) { entries.push({ lesson: tag.slice(10) }); lessonCount++; }
-        else if (tag === 'ws-total') totals.push(cc);
-        else if (tag === 'ws-key') keyCc = cc;
-        else if (tag === 'ws-header') header = true;
-      });
-      await ctx.sync();
-      let total = 0, n = 0, count = 0, group = null;
-      const keyList = [];
-      entries.forEach((e) => {
-        if (e.lesson !== undefined) { n = 0; group = lessons[e.lesson] ? lessons[e.lesson].title : 'Lesson'; return; }
-        n++; count++;
-        if (e.nums.items[0]) e.nums.items[0].insertText(WS.questionLabel(n, theme), 'Replace');
-        const q = questions[e.id];
-        if (q) { total += q.marks || 0; keyList.push({ num: n, q, group }); }
-      });
-      totals.forEach((t) => t.insertText(String(total), 'Replace'));
-      if (keyCc) keyCc.insertOoxml(pkg(WS.renderAnswerKey(keyList, theme, docStore.get('ws.header', null), { wrap: false })), 'Replace');
-      await ctx.sync();
-      result = { count, total, lessons: lessonCount, header };
-    });
-    docStore.set('ws.questions', questions);
-    docStore.set('ws.lessons', lessons);
-    await docStore.save();
-    return result;
+    if (!canEdit()) return { count: 0, total: 0, lessons: 0, header: false };
+    const r = await Doc.call('refresh', { questions, lessons, theme, header: docHeader });
+    if (r && r.questions) questions = r.questions;
+    return r;
   }
 
-  // Re-draw every question (used for teacher/student copy and style changes).
+  // Re-draw everything (teacher/student copy, style changes).
   async function rerenderAll() {
-    await Word.run(async (ctx) => {
-      const ccs = ctx.document.body.contentControls;
-      ccs.load('items/tag,items/text');
-      await ctx.sync();
-      let n = 0;
-      ccs.items.forEach((cc) => {
-        const tag = cc.tag || '';
-        if (tag.startsWith('ws-q:')) {
-          n++;
-          const q = questions[tag.slice(5)];
-          if (q) cc.insertOoxml(pkg(WS.renderQuestion(q, n, theme, { show: mode === 'teacher', wrap: false })), 'Replace');
-        } else if (tag.startsWith('ws-lesson:')) {
-          const l = lessons[tag.slice(10)];
-          if (l) cc.insertOoxml(pkg(WS.renderLesson(l, theme, Object.assign({}, l.opts, { wrap: false }))), 'Replace');
-        } else if (tag === 'ws-sec') {
-          const text = (cc.text || '').trim();
-          if (text) cc.insertOoxml(pkg(WS.renderSection(text, theme, { wrap: false })), 'Replace');
-        } else if (tag === 'ws-header') {
-          const h = docStore.get('ws.header', null);
-          if (h) cc.insertOoxml(pkg(WS.renderHeader(h, theme, 0, { wrap: false })), 'Replace');
-        }
-      });
-      await ctx.sync();
-    });
-    await refreshDoc();
+    const r = await Doc.call('rerender', { questions, lessons, theme, mode, header: docHeader });
+    if (r && r.questions) questions = r.questions;
+    return r;
   }
 
-  async function saveQuestion(q) {
-    questions[q.id] = q;
-    docStore.set('ws.questions', questions);
-  }
-
-  async function replaceQuestion(q) {
-    await Word.run(async (ctx) => {
-      const coll = ctx.document.body.contentControls.getByTag('ws-q:' + q.id);
-      coll.load('items');
-      await ctx.sync();
-      if (!coll.items.length) throw new Error('Could not find that question in the document any more.');
-      coll.items.forEach((cc) => cc.insertOoxml(pkg(WS.renderQuestion(q, 1, theme, { show: mode === 'teacher', wrap: false })), 'Replace'));
-      await ctx.sync();
-    });
-  }
-
-  async function selectedQuestionId() {
-    let id = null;
-    await Word.run(async (ctx) => {
-      const cc = await findAncestor(ctx, ctx.document.getSelection(), (t) => t.startsWith('ws-q:'));
-      if (cc) id = cc.tag.slice(5);
-    });
-    return id;
-  }
-
-  // Styles: update the WS styles already in the document (Word 2019+/365/web).
-  async function applyStyles() {
-    if (!isSet('1.5')) return false;
-    await Word.run(async (ctx) => {
-      const defs = WS.styleDefs(theme);
-      const styles = ctx.document.getStyles();
-      const found = defs.map((d) => { const s = styles.getByNameOrNullObject(d.name); s.load('isNullObject'); return s; });
-      await ctx.sync();
-      defs.forEach((d, i) => {
-        let s = found[i];
-        if (s.isNullObject) s = ctx.document.addStyle(d.name, d.type === 'paragraph' ? 'Paragraph' : 'Character');
-        s.font.name = d.font === 'heading' ? theme.headingFont : theme.bodyFont;
-        if (d.size) s.font.size = d.size;
-        s.font.bold = !!d.bold;
-        s.font.italic = !!d.italic;
-        if (d.color) s.font.color = '#' + d.color;
-        if (d.type === 'paragraph' && d.spacing) {
-          s.paragraphFormat.spaceBefore = d.spacing.before / 20;
-          s.paragraphFormat.spaceAfter = d.spacing.after / 20;
-        }
-      });
-      await ctx.sync();
-    });
-    return true;
-  }
+  async function saveQuestion(q) { questions[q.id] = q; }
+  const replaceQuestion = (q) => Doc.call('replaceQuestion', { q, theme, mode });
+  const selectedQuestionId = () => Doc.call('selectedQuestionId');
+  const applyStyles = () => Doc.call('applyStyles', { theme });
 
   // =====================================================================
   //  Wizard
@@ -587,8 +441,6 @@
         xml += WS.renderQuestion(it.q, 1, theme, { show: mode === 'teacher' });
       }
     });
-    docStore.set('ws.questions', questions);
-    docStore.set('ws.lessons', lessons);
     await insertXml(xml, where || (lessonNo ? 'end' : undefined));
     const r = await refreshDoc();
     toast('Inserted – ' + (r.lessons ? r.lessons + ' lessons, ' : '') + r.count + ' questions (' + r.total + ' marks).');
@@ -696,6 +548,7 @@
   }
   function openUrl(url) {
     try {
+      if (POPOUT && bridge) return bridge.call('openUrl', { url }).catch(() => window.open(url, '_blank'));
       if (inWord && Office.context.ui && Office.context.ui.openBrowserWindow) return Office.context.ui.openBrowserWindow(url);
     } catch (e) { /* fall back */ }
     window.open(url, '_blank');
@@ -732,13 +585,7 @@
   });
   guard($('aiUseSelection'), async () => {
     if (!needWord()) return;
-    let text = '';
-    await Word.run(async (ctx) => {
-      const sel = ctx.document.getSelection();
-      sel.load('text');
-      await ctx.sync();
-      text = sel.text || '';
-    });
+    const text = (await Doc.call('selectionText')) || '';
     if (!text.trim()) return toast('Select some text in the document first.', true);
     $('aiSource').value = text.trim();
     toast('Selected text added as source material (' + text.trim().split(/\s+/).length + ' words).');
@@ -1017,23 +864,16 @@
     if (!needWord()) return;
     const p = aiReadyProvider();
     if (!p) throw new Error('Writing model answers needs a Claude or Gemini API key (AI tab → Connection settings).');
-    const ids = [];
-    await Word.run(async (ctx) => {
-      const ccs = ctx.document.body.contentControls;
-      ccs.load('items/tag');
-      await ctx.sync();
-      ccs.items.forEach((cc) => { if ((cc.tag || '').startsWith('ws-q:')) ids.push(cc.tag.slice(5)); });
-    });
+    const ids = await Doc.call('questionIds');
     const todo = ids.map((id) => questions[id]).filter((q) => q && q.type === 'written' && !q.answer);
     if (!todo.length) return toast('Every written question already has a model answer.');
-    const h = docStore.get('ws.header', null);
+    const h = docHeader;
     const level = $('aiLevel').value.trim() || (h && h.group) || '';
     const text = await withBusy($('aiAnswers'), 'Writing ' + todo.length + ' answers…', () => AI.complete(p, aiCfg(p), AI.answersPrompt(todo, level)));
     let n = 0;
     AI.parseJsonArray(text).forEach((a) => {
       if (a && questions[a.id] && a.answer && !questions[a.id].answer) { questions[a.id].answer = String(a.answer).trim(); n++; }
     });
-    docStore.set('ws.questions', questions);
     if (mode === 'teacher') await rerenderAll(); else await refreshDoc();
     toast(n + ' model answer' + (n === 1 ? '' : 's') + ' added – see the teacher copy or answer key.');
   });
@@ -1078,20 +918,9 @@
     toast('Header ready.');
   });
   async function insertHeader(h) {
-    docStore.set('ws.header', h);
+    docHeader = h;
     remember('subjects', h.subject); remember('groups', h.group); fillDatalists();
-    await Word.run(async (ctx) => {
-      const existing = ctx.document.body.contentControls.getByTag('ws-header');
-      existing.load('items');
-      await ctx.sync();
-      if (existing.items.length) existing.items[0].insertOoxml(pkg(WS.renderHeader(h, theme, 0, { wrap: false })), 'Replace');
-      else ctx.document.body.insertOoxml(pkg(WS.renderHeader(h, theme, 0)), 'Start');
-      if (h.footer) {
-        const footer = ctx.document.sections.getFirst().getFooter('Primary');
-        footer.insertOoxml(pkg(WS.renderFooter([h.subject, h.title].filter(Boolean).join(' – '))), 'Replace');
-      }
-      await ctx.sync();
-    });
+    await Doc.call('insertHeader', { h, theme });
     await refreshDoc();
   }
 
@@ -1105,20 +934,14 @@
   });
   guard($('tKey'), async () => {
     if (!needWord()) return;
-    await Word.run(async (ctx) => {
-      const existing = ctx.document.body.contentControls.getByTag('ws-key');
-      existing.load('items');
-      await ctx.sync();
-      if (!existing.items.length) ctx.document.body.insertOoxml(pkg(WS.renderAnswerKey([], theme, docStore.get('ws.header', null))), 'End');
-      await ctx.sync();
-    });
+    await Doc.call('ensureKey', { theme, header: docHeader });
     await refreshDoc(); // fills in the key
     toast('Answer key updated at the end of the document.');
   });
   async function setMode(m) {
     if (!needWord()) return;
     mode = m;
-    docStore.set('ws.mode', m);
+    await persist({ mode: m });
     updateModeBadge();
     await rerenderAll();
     toast(m === 'teacher' ? 'Teacher copy: answers are shown in red.' : 'Student copy: answers hidden.');
@@ -1138,11 +961,7 @@
   });
   guard($('tDelete'), async () => {
     if (!needWord()) return;
-    let found = false;
-    await Word.run(async (ctx) => {
-      const cc = await findAncestor(ctx, ctx.document.getSelection(), (t) => t.startsWith('ws-q:'));
-      if (cc) { cc.delete(false); found = true; await ctx.sync(); }
-    });
+    const found = await Doc.call('deleteSelectedQuestion');
     if (!found) return toast('Click inside a question in the document first.', true);
     const r = await refreshDoc();
     toast('Deleted. ' + r.count + ' questions left.');
@@ -1150,30 +969,11 @@
 
   guard($('tBox'), async () => {
     if (!needWord()) return;
-    await Word.run(async (ctx) => {
-      const sel = ctx.document.getSelection();
-      if (theme.checkboxMode === 'clickable' && isSet('1.9')) {
-        sel.getRange('Start').insertContentControl('CheckBox');
-      } else if (theme.checkboxMode === 'clickable') {
-        sel.getRange('Start').insertOoxml(pkg(WS.para({}, WS.checkbox(false, 'box', theme) + WS.run(' '))), 'Replace');
-      } else {
-        sel.insertText('☐ ', 'Start');
-      }
-      await ctx.sync();
-    });
+    await Doc.call('insertCheckbox', { theme });
   });
   guard($('tBoxLines'), async () => {
     if (!needWord()) return;
-    await Word.run(async (ctx) => {
-      const sel = ctx.document.getSelection();
-      const paras = sel.paragraphs;
-      paras.load('items/text');
-      await ctx.sync();
-      const lines = paras.items.map((p) => p.text.replace(/^[☐☒○●•\-*]\s*/, '').trim()).filter(Boolean);
-      if (!lines.length) throw new Error('Select the lines you want to turn into a checklist first.');
-      sel.insertOoxml(pkg(WS.renderChecklist('', lines, theme)), 'Replace');
-      await ctx.sync();
-    });
+    await Doc.call('selectionToChecklist', { theme });
     toast('Checklist created.');
   });
   guard($('tChecklist'), async () => {
@@ -1266,7 +1066,7 @@
   guard($('sApply'), async () => {
     readStyleForm();
     if (!needWord()) return;
-    docStore.set('ws.theme', theme);
+    await persist({ theme });
     const stylesUpdated = await applyStyles();
     await rerenderAll();
     toast(stylesUpdated ? 'Style applied to the whole worksheet.' : 'Questions updated. (Your Word version can’t update fonts on existing text – new content will use the new style.)');
@@ -1374,7 +1174,7 @@
     if ($('tplUseStyle').checked) {
       theme = Object.assign({}, WS.DEFAULT_THEME, currentTemplateTheme(), { checkboxMode: theme.checkboxMode, design: tpl.design || t.design });
       fillStyleForm();
-      docStore.set('ws.theme', theme);
+      await persist({ theme });
       await applyStyles();
     }
     if ($('tplUseHeader').checked) {
@@ -1421,14 +1221,81 @@
   });
 
   // =====================================================================
+  //  Pop-out window
+  // =====================================================================
+  // Task pane: run document requests coming from the pop-out window.
+  async function hostHandle(op, args) {
+    if (op === 'openUrl') { openUrl(args.url); return true; }
+    if (op === 'ping') return true;
+    const fn = window.WSDocOps[op];
+    if (typeof fn !== 'function') throw new Error('Unknown request: ' + op);
+    return fn(args);
+  }
+
+  async function popOut() {
+    if (POPOUT || hostWin) return;
+    if (!inWord) throw new Error('Open Worksheet Builder inside Word first.');
+    if (!Office.context.requirements.isSetSupported('DialogApi', '1.2')) {
+      throw new Error('This version of Word can’t open add-in windows – Microsoft 365 or Word 2021 or later is needed.');
+    }
+    const url = location.href.split('#')[0].split('?')[0] + '?window=1';
+    hostWin = await window.WSBridge.openWindow({ url, width: 60, height: 85, handle: hostHandle, onClose: onWindowClosed });
+    $('popOverlay').classList.remove('hidden');
+  }
+
+  async function onWindowClosed() {
+    hostWin = null;
+    $('popOverlay').classList.add('hidden');
+    try { await reloadFromDocument(); } catch (e) { /* keep what we have */ }
+    toast('Worksheet Builder is back in the panel.');
+  }
+
+  // Read the worksheet data saved in the document (after the pop-out window has been working on it).
+  async function loadState() {
+    let st = null;
+    try {
+      if (POPOUT) st = bridge ? await bridge.call('state') : null;
+      else if (inWord) st = await window.WSDocOps.state();
+    } catch (e) {
+      if (POPOUT) bridge = null;
+    }
+    st = st || {};
+    questions = st.questions || {};
+    lessons = st.lessons || {};
+    mode = st.mode || 'student';
+    docHeader = st.header || null;
+    apiSets = st.sets || {};
+    return st;
+  }
+
+  async function reloadFromDocument() {
+    const st = await loadState();
+    theme = Object.assign({}, WS.DEFAULT_THEME, local.get('theme', {}), st.theme || {});
+    fillStyleForm();
+    if (st.header) fillHeader(st.header);
+    fillDatalists();
+    updateModeBadge();
+    renderTemplates();
+  }
+
+  guard($('popBtn'), async () => {
+    if (POPOUT) { if (bridge) bridge.dock(); else window.close(); return; }
+    await popOut();
+  });
+  $('popBack').addEventListener('click', () => { if (hostWin) hostWin.close(); });
+  $('autoPopout').addEventListener('change', (e) => local.set('autoPopout', e.target.checked));
+
+  // =====================================================================
   //  Start-up
   // =====================================================================
-  function init() {
-    theme = Object.assign({}, WS.DEFAULT_THEME, local.get('theme', {}), docStore.get('ws.theme', {}));
-    questions = docStore.get('ws.questions', {}) || {};
-    lessons = docStore.get('ws.lessons', {}) || {};
-    mode = docStore.get('ws.mode', 'student');
-    fillHeader(docStore.get('ws.header', null) || local.get('header', null));
+  async function init() {
+    if (POPOUT) {
+      document.body.classList.add('popout');
+      try { bridge = window.WSBridge.connect(); await bridge.ready; } catch (e) { bridge = null; }
+    }
+    const st = await loadState();
+    theme = Object.assign({}, WS.DEFAULT_THEME, local.get('theme', {}), st.theme || {});
+    fillHeader(st.header || local.get('header', null));
     fillDatalists();
     fillStyleForm();
     updateModeBadge();
@@ -1443,22 +1310,29 @@
     aiMode = local.get('aiMode', 'topic');
     $('aiMode').querySelectorAll('button').forEach((b) => b.classList.toggle('active', b.dataset.mode === aiMode));
     aiProviderChanged();
-    if (!inWord) {
-      $('banner').textContent = 'You are viewing the add-in outside Word. Everything can be previewed, but inserting only works inside Word.';
+    $('autoPopout').checked = !!local.get('autoPopout', false);
+    $('popBtn').classList.toggle('hidden', !(POPOUT || inWord));
+    if (POPOUT) { $('popBtn').textContent = '⇲ Dock'; $('popBtn').title = 'Put Worksheet Builder back in the Word panel'; }
+
+    if (!canEdit()) {
+      $('banner').textContent = POPOUT
+        ? 'This window couldn’t reach Word. Close it and open it again with the ⧉ button in the Worksheet Builder panel.'
+        : 'You are viewing the add-in outside Word. Everything can be previewed, but inserting only works inside Word.';
       $('banner').classList.remove('hidden');
       $('apiInfo').textContent = '';
     } else {
       const sets = ['1.3', '1.5', '1.9'].filter((v) => isSet(v));
       $('apiInfo').textContent = 'Word API support: ' + (sets.length ? sets.join(', ') : 'basic') + (isSet('1.5') ? '' : ' – style updates need Word 2021, Microsoft 365 or Word on the web.');
       if (!isSet('1.3')) {
-        $('banner').textContent = 'This version of Word is too old for Worksheet Builder. Please use Word 2016 or later, Microsoft 365 or Word on the web.';
+        $('banner').textContent = 'This version of Word is too old for Worksheet Builder. Please use Microsoft 365, Word 2021 or later, or Word on the web.';
         $('banner').classList.remove('hidden');
       }
     }
+    if (inWord && !POPOUT && local.get('autoPopout', false)) popOut().catch((e) => toast(e.message || String(e), true));
   }
 
   if (typeof Office !== 'undefined' && Office.onReady) {
-    Office.onReady((info) => { inWord = !!(info && info.host === Office.HostType.Word); init(); });
+    Office.onReady((info) => { inWord = !POPOUT && !!(info && info.host === Office.HostType.Word); init(); });
   } else {
     init();
   }
