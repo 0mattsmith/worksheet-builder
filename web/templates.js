@@ -51,6 +51,20 @@
     { id: 'ink', name: 'Ink saver', accent: '000000' },
   ];
 
+  // ------------------------------------------------------------------ TOPIC SUGGESTIONS
+  const TOPICS = {
+    maths: ['Place value', 'Fractions', 'Decimals', 'Percentages', 'Ratio and proportion', 'Negative numbers', 'Algebraic expressions',
+      'Solving equations', 'Sequences', 'Straight-line graphs', 'Angles', 'Area and perimeter', 'Volume', 'Pythagoras’ theorem', 'Probability', 'Averages and range', 'Time', 'Money'],
+    english: ['Persuasive writing', 'Poetry analysis', 'Descriptive writing', 'Macbeth', 'A Christmas Carol', 'Sentence types', 'Apostrophes',
+      'Speech punctuation', 'Figurative language', 'Non-fiction reading', 'Prefixes and suffixes', 'Story openings', 'Formal letters', 'Myths and legends'],
+    science: ['Cells', 'Photosynthesis', 'Digestion', 'Forces', 'Energy transfers', 'Electric circuits', 'States of matter', 'Acids and alkalis',
+      'Atoms and elements', 'The periodic table', 'The solar system', 'Food chains and ecosystems', 'Magnetism', 'Light and sound', 'Variation and inheritance'],
+    ict: ['Binary', 'Algorithms', 'Flowcharts', 'Python basics', 'Variables and data types', 'Loops', 'Online safety', 'Networks and the internet',
+      'Computer hardware', 'Spreadsheets', 'Databases', 'Cyber security', 'HTML basics', 'Logic gates'],
+    stem: ['Bridges and structures', 'Simple machines', 'Renewable energy', 'Paper rockets', 'Water filtration', 'Circuits and LEDs',
+      'Egg drop challenge', 'Sustainable design', 'Data logging', 'Robotics basics', 'Testing materials', 'Designing a boat'],
+  };
+
   const designById = (id) => DESIGNS.find((d) => d.id === id) || DESIGNS[0];
   const schemeById = (id) => SCHEMES.find((c) => c.id === id) || SCHEMES[0];
 
@@ -311,5 +325,5 @@
   function general() { return T.filter((t) => t.subjects.includes('*')); }
   function byId(id) { return T.find((t) => t.id === id); }
 
-  global.WSTemplates = { SUBJECTS, DESIGNS, SCHEMES, ALL: T, forSubject, general, byId, themeFor, thumb, designById, schemeById };
+  global.WSTemplates = { SUBJECTS, TOPICS, DESIGNS, SCHEMES, ALL: T, forSubject, general, byId, themeFor, thumb, designById, schemeById };
 })(typeof window !== 'undefined' ? window : globalThis);

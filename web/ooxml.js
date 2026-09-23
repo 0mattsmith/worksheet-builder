@@ -570,14 +570,16 @@
     const finish = () => {
       if (!cur) return;
       const q = cur;
-      if (q.options.length) {
+      const ft = q.forceType;
+      if (q.options.length && ft !== 'written') {
         const nCorrect = q.options.filter((o) => o.correct).length;
-        q.type = q.forceType || (nCorrect > 1 ? 'multi' : 'mc');
+        q.type = ft === 'mc' || ft === 'multi' ? ft : (nCorrect > 1 ? 'multi' : 'mc');
         if (nCorrect === 0) errors.push('“' + q.text.slice(0, 40) + '” has no correct option (mark it with *).');
-      } else if (q.pairs.length) q.type = 'match';
-      else if (/\[[^\]]+\]/.test(q.text)) q.type = 'blanks';
-      else if (/^(true|false|t|f)$/i.test(q.answer || '')) { q.type = 'tf'; q.answer = /^t/i.test(q.answer) ? 'true' : 'false'; }
+      } else if (ft === 'match' || (!ft && q.pairs.length)) q.type = 'match';
+      else if (ft === 'blanks' || (!ft && /\[[^\]]+\]/.test(q.text))) q.type = 'blanks';
+      else if (ft === 'tf' || (!ft && /^(true|false|t|f)$/i.test(q.answer || ''))) { q.type = 'tf'; q.answer = /^t/i.test(q.answer || 't') ? 'true' : 'false'; }
       else q.type = 'written';
+      if (q.type !== 'mc' && q.type !== 'multi') q.options = [];
       if (q.type === 'written' && !q.lines) q.lines = q.marks ? Math.min(14, Math.max(2, q.marks * 2)) : 3;
       if (!q.marksGiven) q.marks = autoMarks(q);
       delete q.marksGiven;
@@ -627,7 +629,7 @@
       if (/^(word ?bank|bank)\s*:\s*(yes|y|true|on)/i.test(line)) { cur.wordBank = true; return; }
       if (/^shuffle\s*:\s*(yes|y|true|on)/i.test(line)) { cur.shuffle = true; return; }
       if ((m = line.match(/^(?:space|area)\s*:\s*(lines|box|grid)/i))) { cur.area = m[1].toLowerCase(); return; }
-      if ((m = line.match(/^type\s*:\s*(multi|mc)/i))) { cur.forceType = m[1].toLowerCase(); return; }
+      if ((m = line.match(/^type\s*:\s*(multi|mc|tf|written|blanks|match)\b/i))) { cur.forceType = m[1].toLowerCase(); return; }
       if ((m = line.match(/^([*\-•+]|[a-h][).])\s+(.+)$/i))) {
         let text = m[2].trim();
         let correct = m[1] === '*' || m[1] === '+';
@@ -642,7 +644,53 @@
     return { items, errors };
   }
 
-  const api = { DEFAULT_THEME, questionLabel, tint, styleDefs, stylesXml, renderQuestion, renderSection, renderChecklist, renderLines, renderHeader,
+  // ---------- back to Quick build text (for editing drafts) ----------
+  const oneLine = (t) => String(t == null ? '' : t).replace(/\s*\n\s*/g, ' ').trim();
+
+  function questionToQuick(q) {
+    const out = [];
+    const marks = q.marks || 0;
+    out.push('Q: ' + oneLine(q.text) + ' (' + marks + ' mark' + (marks === 1 ? '' : 's') + ')');
+    const t = q.type;
+    if (t === 'mc' || t === 'multi') {
+      const opts = q.options || [];
+      const nCorrect = opts.filter((o) => o.correct).length;
+      if (t === 'multi' && nCorrect < 2) out.push('type: multi');
+      if (t === 'mc' && nCorrect > 1) out.push('type: mc');
+      opts.forEach((o) => out.push((o.correct ? '* ' : '- ') + oneLine(o.text)));
+      if (q.order) out.push('shuffle: yes');
+    } else if (t === 'tf') {
+      out.push('A: ' + (String(q.answer).toLowerCase() === 'true' ? 'true' : 'false'));
+    } else if (t === 'blanks') {
+      if (q.wordBank) out.push('wordbank: yes');
+    } else if (t === 'match') {
+      (q.pairs || []).forEach((p) => out.push(oneLine(p.left) + ' = ' + oneLine(p.right)));
+    } else {
+      if (/\[[^\]]+\]/.test(q.text || '') || /^(true|false|t|f)$/i.test(oneLine(q.answer))) out.push('type: written');
+      if (q.answer) out.push('A: ' + oneLine(q.answer));
+      out.push('lines: ' + (q.lines || 3));
+      if (q.area) out.push('space: ' + q.area);
+    }
+    return out.join('\n');
+  }
+
+  function toQuick(items) {
+    const out = [];
+    (items || []).forEach((it) => {
+      if (it.kind === 'section') out.push('', '# ' + oneLine(it.text));
+      else if (it.kind === 'text') String(it.text || '').split('\n').forEach((l) => out.push('> ' + l));
+      else if (it.kind === 'check') it.items.forEach((x) => out.push('[ ] ' + oneLine(x)));
+      else if (it.kind === 'lesson') {
+        const l = it.lesson || {};
+        out.push('', '=== ' + oneLine(l.title));
+        (l.objectives || []).forEach((o) => out.push('LO: ' + oneLine(o)));
+        if (l.vocabulary && l.vocabulary.length) out.push('vocab: ' + l.vocabulary.map(oneLine).join(', '));
+      } else if (it.kind === 'question') out.push(questionToQuick(it.q));
+    });
+    return out.join('\n').replace(/^\n+/, '').trim() + '\n';
+  }
+
+  const api = { DEFAULT_THEME, toQuick, questionToQuick, questionLabel, tint, styleDefs, stylesXml, renderQuestion, renderSection, renderChecklist, renderLines, renderHeader,
     renderAnswerKey, renderFooter, renderText, renderLesson, answerText, wrapPackage, numberLabel, marksLabel, autoMarks, shuffle, parseQuick, blanksAnswers, checkbox, para, run, NS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else global.WSOoxml = api;

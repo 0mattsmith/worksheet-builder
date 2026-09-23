@@ -43,6 +43,29 @@
       <div id="tplBrowse">
         <h2>Start from a template</h2>
         <div class="subject-chips" id="subjectChips"></div>
+
+        <div class="ideas-card">
+          <div class="ideas-head">
+            <b>✨ Ready-made worksheets for a topic</b>
+            <small>AI writes a few complete worksheets for you to choose from – preview and edit one before it goes into Word.</small>
+          </div>
+          <label class="field">Topic <input id="ideaTopic" placeholder="e.g. Photosynthesis" /></label>
+          <div class="topic-chips" id="topicChips"></div>
+          <div class="two">
+            <label class="field">Pupils <input id="ideaLevel" list="aiLevelList" placeholder="e.g. Year 8" /></label>
+            <label class="field">Suggestions
+              <select id="ideaCount"><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option></select>
+            </label>
+          </div>
+          <div class="actions">
+            <button class="primary" id="ideaGo">Suggest worksheets</button>
+            <button class="secondary hidden" id="ideaMore">More ideas</button>
+          </div>
+          <div id="ideaNote" class="muted small hidden"></div>
+          <div id="ideaList" class="idea-list"></div>
+        </div>
+
+        <h3 class="sub">Templates</h3>
         <div id="tplList" class="tpl-grid"></div>
         <h3 class="sub">Works for any subject</h3>
         <div id="tplGeneral" class="tpl-grid"></div>
@@ -53,6 +76,44 @@
           <button class="secondary small" id="tplSave">Save current look</button>
         </div>
         <small>Saves your current style and header as a template for the selected subject.</small>
+      </div>
+
+      <!-- editable draft of a suggested worksheet -->
+      <div id="tplDraft" class="hidden">
+        <button class="link" id="draftBack">&larr; Back to suggestions</button>
+        <div class="draft-head">
+          <span class="pill" id="draftPurpose"></span>
+          <h2 id="draftName"></h2>
+          <small id="draftInfo"></small>
+        </div>
+        <label class="field">Worksheet title <input id="draftTitle" /></label>
+        <details class="guide" id="draftLook">
+          <summary>Instructions, design and colours</summary>
+          <label class="field">Instructions <textarea id="draftInstr" rows="2"></textarea></label>
+          <div class="field">Base design <div id="draftDesigns" class="design-grid"></div></div>
+          <div class="field">Colour scheme <div id="draftSchemes" class="swatches"></div></div>
+        </details>
+        <div class="draft-bar">
+          <div class="segmented small" id="draftView">
+            <button data-v="visual" class="active">Edit</button>
+            <button data-v="text">Edit as text</button>
+          </div>
+          <button class="link hidden" id="draftUndo">↶ Undo</button>
+          <label class="check"><input type="checkbox" id="draftAnswers" /> Show answers</label>
+        </div>
+        <p class="d-hint" id="draftHint">Point at any part of the worksheet to edit, rewrite with AI ↻, move or delete it.</p>
+        <div id="draftVisual" class="draft-page"></div>
+        <div id="draftTextWrap" class="hidden">
+          <small>Quick build format – changes show up when you switch back to Edit.</small>
+          <textarea id="draftText" rows="22" spellcheck="false" class="mono"></textarea>
+        </div>
+        <div id="draftSummary" class="summary"></div>
+        <div class="actions sticky">
+          <button class="primary" id="draftCreate">Create worksheet</button>
+          <button class="secondary" id="draftAdd">+ Question</button>
+          <button class="secondary" id="draftAiAdd">✨ 2 more</button>
+          <button class="secondary" id="draftToQuick">Open in Quick build</button>
+        </div>
       </div>
 
       <div id="tplDetail" class="hidden">
@@ -84,6 +145,7 @@
     <!-- ============ WIZARD ============ -->
     <section id="tab-wizard" class="tab">
       <div id="wiz-step1">
+        <div id="wizDraftNote" class="banner-inline hidden">Adding a question to your draft worksheet. <button class="link" id="wizDraftCancel">Back to the draft</button></div>
         <h2>1 · Choose a question type</h2>
         <div class="type-grid" id="typeGrid"></div>
       </div>

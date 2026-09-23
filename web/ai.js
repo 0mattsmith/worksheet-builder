@@ -43,6 +43,8 @@
     'Fill in the blanks:              put each missing word in [square brackets] inside the question; add a line "wordbank: yes" for a word bank.',
     'Matching:                        pairs on their own lines as "left = right" (3–6 pairs, write them in the correct pairing; they are shuffled later).',
     'Written answer:                  a line "A: model answer" and a line "lines: N" for the number of writing lines.',
+    'Text for pupils to read:         lines starting with "> " (for example a short reading passage or a scenario).',
+    'Tick-box checklist:              lines starting with "[ ] " (for example success criteria).',
     '',
     'Example:',
     '# Part A',
@@ -129,6 +131,48 @@
       (o.extra ? ' Extra instructions: ' + o.extra : '') + '\n\n' + LESSON_RULES + '\n\n' + FORMAT_RULES;
   }
 
+  // ---------- ready-made worksheet suggestions for a topic ----------
+  function ideasPrompt(o, catalogue, avoid) {
+    return 'Suggest ' + o.n + ' different worksheets a UK teacher could use for this topic.\n' +
+      'Topic: ' + o.topic + '\n' + (o.subject ? 'Subject: ' + o.subject + '\n' : '') + (o.level ? 'Pupils: ' + o.level + '\n' : '') +
+      'Make them clearly different in purpose – for example a quick knowledge check, practice and application, exam-style questions, key vocabulary, a reading-based task, a practical or investigation, or a challenge – whichever suit this topic best.\n' +
+      (avoid && avoid.length ? 'Do not repeat these ideas: ' + avoid.join('; ') + '.\n' : '') +
+      'For each, choose the most suitable layout template id from this list:\n' +
+      catalogue.map((t) => '- ' + t.id + ': ' + t.name + ' – ' + t.desc).join('\n') + '\n' +
+      'Reply with ONLY a JSON array, no commentary:\n' +
+      '[{"title":"short worksheet title","purpose":"2–4 word label","summary":"one sentence telling the teacher what pupils will do","template":"template id","questions":8,"minutes":20}]';
+  }
+
+  function ideaPrompt(o, idea, t) {
+    const extra = ['This worksheet is "' + idea.title + '" (' + idea.purpose + '): ' + idea.summary];
+    if (t && t.structure) {
+      extra.push('Follow this structure. Keep its section headings, rewrite any prompts, "> " text lines and "[ ]" checklist items so they fit the topic, and put the questions under the right sections:\n' + t.structure);
+      if (/^>/m.test(t.structure)) extra.push('Where a "> " line asks for a text or passage, write it yourself: original, accurate and suitable for the pupils (150–300 words), as "> " lines.');
+    }
+    extra.push('Every written question must have a model answer.');
+    if (o.extra) extra.push(o.extra);
+    return buildPrompt({
+      count: Math.max(3, Math.min(20, idea.questions || o.count || 8)),
+      topic: o.topic, level: o.level,
+      types: (t && t.ai && t.ai.types) || o.types,
+      difficulty: (t && t.ai && t.ai.difficulty) || o.difficulty || 'mixed',
+      extra: extra.join('\n'),
+    });
+  }
+
+  function replaceQuestionPrompt(o, questionText, typeName, others) {
+    return 'Write ONE new question to replace the one below, for a worksheet on ' + o.topic + (o.level ? ' for ' + o.level : '') + '. ' +
+      'Keep the same question type (' + typeName + '), a similar difficulty and the same marks, but ask about something different from all the other questions.\n\n' +
+      'Question to replace:\n' + questionText + '\n\nOther questions on the worksheet:\n' + others.map((x) => '- ' + x).join('\n') + '\n\n' +
+      FORMAT_RULES + '\nWrite only the one question – no section headings.';
+  }
+
+  function moreQuestionsPrompt(o, section, n, others) {
+    return 'Write ' + n + ' more questions for the section "' + section + '" of a worksheet on ' + o.topic + (o.level ? ' for ' + o.level : '') + '. ' +
+      'Match the style and difficulty of that section, and ask about things not already covered.\n\nQuestions already on the worksheet:\n' +
+      others.map((x) => '- ' + x).join('\n') + '\n\n' + FORMAT_RULES + '\nWrite only the new questions – no section headings.';
+  }
+
   function parseJsonObject(text) {
     const t = String(text || '').replace(/```[a-z]*\n?/gi, '').replace(/```/g, '');
     const s = t.indexOf('{'), e = t.lastIndexOf('}');
@@ -155,7 +199,7 @@
   // Remove code fences / chatter the model may add around the format.
   function cleanOutput(text) {
     let t = String(text || '').replace(/```[a-z]*\n?/gi, '').replace(/```/g, '');
-    const first = t.search(/^(={3,}|#|Q\d*[:.)]|\d+[.)])/m);
+    const first = t.search(/^(={3,}|#|>|\[ ?\]|Q\d*[:.)]|\d+[.)])/m);
     if (first > 0) t = t.slice(first);
     return t.trim();
   }
@@ -242,5 +286,5 @@
     return JSON.parse(t.slice(s, e + 1));
   }
 
-  global.WSAI = { PROVIDERS, SYSTEM, buildPrompt, outlinePrompt, lessonPrompt, bridgeSowPrompt, parseJsonObject, bridgePrompt, tidyPrompt, answersPrompt, cleanOutput, complete, listModels, parseJsonArray };
+  global.WSAI = { PROVIDERS, SYSTEM, TYPE_TEXT, ideasPrompt, ideaPrompt, replaceQuestionPrompt, moreQuestionsPrompt, buildPrompt, outlinePrompt, lessonPrompt, bridgeSowPrompt, parseJsonObject, bridgePrompt, tidyPrompt, answersPrompt, cleanOutput, complete, listModels, parseJsonArray };
 })(typeof window !== 'undefined' ? window : globalThis);

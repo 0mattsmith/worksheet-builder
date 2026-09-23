@@ -121,15 +121,16 @@
     blanks: 'e.g. The [Sun] is at the centre of our [solar system].',
     match: 'e.g. Match each animal to its group.',
   };
-  const wiz = { type: null, options: [], pairs: [], order: null, marksTouched: false, editingId: null };
+  const wiz = { type: null, options: [], pairs: [], order: null, marksTouched: false, editingId: null, draft: null };
 
   function buildTypeGrid() {
     $('typeGrid').innerHTML = Object.keys(TYPES).map((k) =>
       '<button class="type-card" data-type="' + k + '"><div class="ico">' + TYPES[k].ico + '</div><b>' + TYPES[k].name + '</b><span>' + TYPES[k].desc + '</span></button>').join('');
-    $('typeGrid').querySelectorAll('.type-card').forEach((b) => b.addEventListener('click', () => startWizard(b.dataset.type)));
+    $('typeGrid').querySelectorAll('.type-card').forEach((b) => b.addEventListener('click', () => startWizard(b.dataset.type, null, wiz.draft)));
   }
 
-  function startWizard(type, existing) {
+  function startWizard(type, existing, draftCtx) {
+    wiz.draft = draftCtx || null;
     wiz.type = type;
     wiz.order = null;
     wiz.marksTouched = false;
@@ -147,11 +148,14 @@
     $('blanksBlock').classList.toggle('hidden', base !== 'blanks');
     $('matchBlock').classList.toggle('hidden', base !== 'match');
     $('optHelp').textContent = base === 'multi' ? 'Tick every correct answer' : 'Select the correct answer';
-    $('wizInsertNext').classList.toggle('hidden', !!existing);
-    $('wizInsert').textContent = existing ? 'Update question' : 'Insert';
-    $('wizInsert').className = existing ? 'primary' : 'secondary';
-    $('wizCancelEdit').classList.toggle('hidden', !existing);
+    const inDraft = !!wiz.draft;
+    if (inDraft) $('wizTitle').textContent = (existing ? 'Edit question' : t.name) + ' – draft worksheet';
+    $('wizInsertNext').classList.toggle('hidden', !!existing || inDraft);
+    $('wizInsert').textContent = inDraft ? 'Save to worksheet' : existing ? 'Update question' : 'Insert';
+    $('wizInsert').className = existing || inDraft ? 'primary' : 'secondary';
+    $('wizCancelEdit').classList.toggle('hidden', !existing && !inDraft);
     $('wizBack').classList.toggle('hidden', !!existing);
+    $('wizDraftNote').classList.add('hidden');
     $('wizError').classList.add('hidden');
     fillWizard(existing);
     $('qText').focus();
@@ -281,19 +285,20 @@
   }
   const HINTS = { mc: 'Tick one box.', multi: 'Tick all that apply.', tf: 'Tick true or false.', match: 'Match each item on the left to one on the right.' };
 
-  function previewHtml(q, num) {
-    const show = mode === 'teacher';
+  function previewHtml(q, num, opts) {
+    const th = (opts && opts.theme) || theme;
+    const show = opts && opts.show != null ? opts.show : mode === 'teacher';
     if (!q.text) return '<div class="pv-empty">Your question will appear here.</div>';
     let stem = q.type === 'blanks'
       ? richHtml(q.text).replace(/\[([^\]]+)\]/g, (_, a) => show ? '<u style="color:#c00000"><b>' + a + '</b></u>' : '_'.repeat(Math.max(10, Math.ceil(a.length * 1.6))))
       : richHtml(q.text);
-    if (theme.showHints && HINTS[q.type]) stem += ' <span class="pv-hint">' + HINTS[q.type] + '</span>';
-    const a = '#' + theme.accent;
-    const numHtml = theme.numberBadge ? '<span style="background:' + a + ';color:#fff;border-radius:2px;padding:0 3px">' + WS.numberLabel(num || 1, theme.numberFormat).replace(/\.$/, '') + '</span>'
-      : '<span style="color:' + a + '">' + WS.numberLabel(num || 1, theme.numberFormat) + '</span>';
-    const qStyle = theme.questionStyle === 'tinted' ? ' style="background:' + WS.tint(theme.accent, 0.9).replace(/^/, '#') + ';border-left:3px solid ' + a + ';padding:2px 0"' : '';
+    if (th.showHints && HINTS[q.type]) stem += ' <span class="pv-hint">' + HINTS[q.type] + '</span>';
+    const a = '#' + th.accent;
+    const numHtml = th.numberBadge ? '<span style="background:' + a + ';color:#fff;border-radius:2px;padding:0 3px">' + WS.numberLabel(num || 1, th.numberFormat).replace(/\.$/, '') + '</span>'
+      : '<span style="color:' + a + '">' + WS.numberLabel(num || 1, th.numberFormat) + '</span>';
+    const qStyle = th.questionStyle === 'tinted' ? ' style="background:' + WS.tint(th.accent, 0.9).replace(/^/, '#') + ';border-left:3px solid ' + a + ';padding:2px 0"' : '';
     let h = '<div class="pv-q"' + qStyle + '><span class="pv-num">' + numHtml + '</span><span>' + stem + '</span>' +
-      (theme.showMarks && q.marks ? '<span class="pv-marks">' + WS.marksLabel(q.marks, theme.marksFormat) + '</span>' : '<span></span>') + '</div>';
+      (th.showMarks && q.marks ? '<span class="pv-marks">' + WS.marksLabel(q.marks, th.marksFormat) + '</span>' : '<span></span>') + '</div>';
     if (q.type === 'mc' || q.type === 'multi') {
       const order = q.order && q.order.length === q.options.length ? q.order : q.options.map((_, i) => i);
       const g = q.type === 'mc' ? ['○', '●'] : ['☐', '☒'];
@@ -304,13 +309,13 @@
     } else if (q.type === 'tf') {
       const t = q.answer === 'true';
       h += '<div class="pv-opt"><span></span><span>' + (show && t ? '●' : '○') + '</span><span></span><span>True &nbsp;&nbsp;&nbsp;&nbsp; ' + (show && !t ? '●' : '○') + ' &nbsp;False</span></div>';
-    } else if (q.type === 'written' && (q.area || theme.answerArea) !== 'lines') {
-      const area = q.area || theme.answerArea;
+    } else if (q.type === 'written' && (q.area || th.answerArea) !== 'lines') {
+      const area = q.area || th.answerArea;
       const hgt = Math.min(q.lines, 12) * (area === 'grid' ? 17 : 22);
       h += '<div class="pv-' + area + '" style="height:' + hgt + 'px">' + (show && q.answer ? '<span style="color:#c00000;font-weight:700;background:#fff">' + esc(q.answer) + '</span>' : '') + '</div>';
     } else if (q.type === 'written') {
       for (let i = 0; i < Math.min(q.lines, 12); i++) {
-        h += '<div class="pv-line ' + theme.lineStyle + '">' + (i === 0 && show && q.answer ? '<span style="color:#c00000;font-weight:700">' + esc(q.answer) + '</span>' : '') + '</div>';
+        h += '<div class="pv-line ' + th.lineStyle + '">' + (i === 0 && show && q.answer ? '<span style="color:#c00000;font-weight:700">' + esc(q.answer) + '</span>' : '') + '</div>';
       }
       if (q.lines > 12) h += '<small>…and ' + (q.lines - 12) + ' more lines</small>';
     } else if (q.type === 'blanks' && q.wordBank) {
@@ -334,6 +339,7 @@
     const err = validate(q);
     if (err) { $('wizError').textContent = err; $('wizError').classList.remove('hidden'); return; }
     $('wizError').classList.add('hidden');
+    if (wiz.draft) { saveToDraft(q, wiz.draft); return; }
     if (!needWord()) return;
     await saveQuestion(q);
     if (wiz.editingId) {
@@ -350,12 +356,28 @@
   }
 
   function resetWizard() {
-    wiz.type = null; wiz.editingId = null;
+    const wasDraft = !!wiz.draft;
+    wiz.type = null; wiz.editingId = null; wiz.draft = null;
     $('wiz-step2').classList.add('hidden');
     $('wiz-step1').classList.remove('hidden');
+    $('wizDraftNote').classList.add('hidden');
+    if (wasDraft) { showTab('templates'); showDraftView(); }
   }
 
-  $('wizBack').addEventListener('click', resetWizard);
+  // Wizard opened from the draft editor: choose a type for a new question in the draft.
+  function wizardPickForDraft(ctx) {
+    wiz.type = null; wiz.editingId = null; wiz.draft = ctx;
+    $('wiz-step2').classList.add('hidden');
+    $('wiz-step1').classList.remove('hidden');
+    $('wizDraftNote').classList.remove('hidden');
+    showTab('wizard');
+  }
+  $('wizDraftCancel').addEventListener('click', () => resetWizard());
+
+  $('wizBack').addEventListener('click', () => {
+    if (wiz.draft) { const d = wiz.draft; wizardPickForDraft(d); return; }
+    resetWizard();
+  });
   $('wizCancelEdit').addEventListener('click', resetWizard);
   $('qText').addEventListener('input', updateWizard);
   ['qLines', 'qAnswer'].forEach((id) => $(id).addEventListener('input', updateWizard));
@@ -1101,6 +1123,7 @@
 
   function renderTemplates() {
     renderSubjects();
+    renderTopicChips();
     const list = TPL.forSubject(tpl.subject);
     $('tplList').innerHTML = list.map((t) => cardHtml(t)).join('');
     $('tplGeneral').innerHTML = TPL.general().map((t) => cardHtml(t)).join('');
@@ -1117,6 +1140,7 @@
     const t = findTemplate(id);
     if (!t) return;
     tpl.current = t; tpl.design = null; tpl.scheme = null;
+    $('tplDraft').classList.add('hidden');
     $('tplBrowse').classList.add('hidden');
     $('tplDetail').classList.remove('hidden');
     $('tplName').textContent = t.name;
@@ -1221,6 +1245,408 @@
   });
 
   // =====================================================================
+  //  Ready-made worksheets for a topic (AI suggestions) + draft editor
+  // =====================================================================
+  const ideas = { topic: '', subject: '', o: {}, list: [], provider: null };
+  const draft = { idx: null, template: null, design: null, scheme: null, header: {}, items: [], editing: null, busy: null, history: [], view: 'visual' };
+
+  function renderTopicChips() {
+    const list = (TPL.TOPICS && TPL.TOPICS[tpl.subject]) || [];
+    $('topicChips').innerHTML = list.map((t) => '<button data-topic="' + esc(t) + '">' + esc(t) + '</button>').join('');
+    $('topicChips').querySelectorAll('[data-topic]').forEach((b) => b.addEventListener('click', () => { $('ideaTopic').value = b.dataset.topic; $('ideaTopic').focus(); }));
+  }
+
+  function quickStats(text) {
+    const items = WS.parseQuick(text).items;
+    const qs = items.filter((i) => i.kind === 'question');
+    return { n: qs.length, marks: qs.reduce((a, i) => a + (i.q.marks || 0), 0), items: items.length };
+  }
+
+  function saveIdeas() {
+    local.set('ideas', { topic: ideas.topic, subject: ideas.subject, o: ideas.o, list: ideas.list });
+  }
+
+  function loadIdeas() {
+    const saved = local.get('ideas', null);
+    if (saved && saved.list) {
+      ideas.topic = saved.topic || ''; ideas.subject = saved.subject || ''; ideas.o = saved.o || {};
+      ideas.list = saved.list.map((it) => (it.status === 'ready' || it.status === 'error') ? it : Object.assign(it, { status: 'error', error: 'Interrupted – try again.' }));
+      $('ideaTopic').value = ideas.topic;
+    }
+    $('ideaLevel').value = (saved && saved.o && saved.o.level) || local.get('ideaLevel', '');
+    renderIdeas();
+  }
+
+  function ideaTemplate(it) { return TPL.byId(it.template) || TPL.general()[0]; }
+
+  function renderIdeas() {
+    $('ideaMore').classList.toggle('hidden', !ideas.list.length);
+    $('ideaList').innerHTML = ideas.list.map((it, i) => {
+      const t = ideaTemplate(it);
+      let status, btns = '';
+      if (it.status === 'ready') {
+        const st = quickStats(it.text);
+        status = '<small class="st ok">✓ ' + st.n + ' questions · ' + st.marks + ' marks' + (it.minutes ? ' · about ' + it.minutes + ' min' : '') + '</small>';
+        btns = '<div class="btns"><button class="primary" data-open="' + i + '">Preview &amp; edit</button><button class="secondary" data-redo="' + i + '">↻ Rewrite</button></div>';
+      } else if (it.status === 'error') {
+        status = '<small class="st err">⚠ ' + esc(it.error) + '</small>';
+        btns = '<div class="btns"><button class="secondary" data-redo="' + i + '">Try again</button></div>';
+      } else {
+        status = '<small class="st"><span class="spinner"></span>' + (it.status === 'working' ? 'Writing the worksheet…' : 'Waiting…') + '</small>';
+      }
+      return '<div class="idea' + (it.status === 'ready' ? ' ready' : '') + '" data-i="' + i + '">' + TPL.thumb(themeOfTemplate(t), it.title) +
+        '<div class="idea-body"><span class="pill">' + esc(it.purpose || t.name) + '</span><b>' + esc(it.title) + '</b><small>' + esc(it.summary) + '</small>' +
+        '<small class="muted">Layout: ' + esc(t.name) + '</small>' + status + btns + '</div></div>';
+    }).join('');
+    $('ideaList').querySelectorAll('.idea.ready').forEach((el) => el.addEventListener('click', (e) => { if (!e.target.closest('button')) openDraft(+el.dataset.i); }));
+    $('ideaList').querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => openDraft(+b.dataset.open)));
+    $('ideaList').querySelectorAll('[data-redo]').forEach((b) => guard(b, () => writeIdeas([+b.dataset.redo])));
+  }
+
+  async function writeIdeas(indices) {
+    const p = aiReadyProvider();
+    if (!p) throw new Error('Suggestions need a Claude or Gemini API key – add one in the AI ✦ tab.');
+    const cfg = aiCfg(p);
+    indices.forEach((i) => { ideas.list[i].status = 'waiting'; ideas.list[i].error = ''; });
+    renderIdeas();
+    let next = 0;
+    const worker = async () => {
+      while (next < indices.length) {
+        const it = ideas.list[indices[next++]];
+        it.status = 'working'; renderIdeas();
+        try {
+          const text = await AI.complete(p, cfg, AI.ideaPrompt(ideas.o, it, ideaTemplate(it)));
+          it.text = AI.cleanOutput(text);
+          if (!quickStats(it.text).n) throw new Error('No questions came back – try again.');
+          it.status = 'ready';
+        } catch (e) {
+          it.status = 'error'; it.error = (e && e.message) || String(e);
+        }
+        renderIdeas(); saveIdeas();
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+  }
+
+  async function generateIdeas(more) {
+    const topic = $('ideaTopic').value.trim();
+    if (!topic) throw new Error('Type a topic first, or tap one of the suggestions under the box.');
+    const p = aiReadyProvider();
+    if (!p) {
+      $('ideaNote').innerHTML = 'Suggestions are written by Claude or Gemini. Add an API key in the <b>AI ✦</b> tab (Connection settings), then try again.';
+      $('ideaNote').classList.remove('hidden');
+      throw new Error('Add a Claude or Gemini API key in the AI ✦ tab first.');
+    }
+    $('ideaNote').classList.add('hidden');
+    const subj = TPL.SUBJECTS.find((x) => x.id === tpl.subject);
+    const o = { topic, subject: subj ? subj.name : '', level: $('ideaLevel').value.trim(), n: +$('ideaCount').value || 3,
+      types: ['mc', 'tf', 'blanks', 'written'], difficulty: 'mixed' };
+    local.set('ideaLevel', o.level);
+    if (!more || ideas.topic !== topic || ideas.subject !== tpl.subject) ideas.list = [];
+    ideas.topic = topic; ideas.subject = tpl.subject; ideas.o = o;
+    const catalogue = TPL.forSubject(tpl.subject).concat(TPL.general());
+    const btn = more ? $('ideaMore') : $('ideaGo');
+    const text = await withBusy(btn, 'Thinking of ideas…', () => AI.complete(p, aiCfg(p),
+      AI.ideasPrompt(o, catalogue.map((t) => ({ id: t.id, name: t.name, desc: t.desc })), more ? ideas.list.map((i) => i.title) : []), { maxTokens: 2500 }));
+    const arr = AI.parseJsonArray(text).filter((x) => x && x.title).slice(0, o.n).map((x) => ({
+      title: String(x.title).trim(), purpose: String(x.purpose || '').trim(), summary: String(x.summary || '').trim(),
+      template: TPL.byId(x.template) ? x.template : catalogue[0].id,
+      questions: Math.max(3, Math.min(20, parseInt(x.questions, 10) || 8)), minutes: parseInt(x.minutes, 10) || 0,
+      status: 'waiting', text: '', error: '',
+    }));
+    if (!arr.length) throw new Error('No ideas came back – try again.');
+    const start = ideas.list.length;
+    ideas.list.push.apply(ideas.list, arr);
+    saveIdeas();
+    renderIdeas();
+    $('ideaList').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    await writeIdeas(arr.map((_, i) => start + i));
+    const ok = ideas.list.filter((x) => x.status === 'ready').length;
+    toast(ok + ' worksheet' + (ok === 1 ? '' : 's') + ' ready – open one to preview and edit it.');
+  }
+  guard($('ideaGo'), () => generateIdeas(false));
+  guard($('ideaMore'), () => generateIdeas(true));
+
+  // ---------- draft editor ----------
+  function showDraftView() {
+    if (draft.idx == null) return;
+    $('tplBrowse').classList.add('hidden');
+    $('tplDetail').classList.add('hidden');
+    $('tplDraft').classList.remove('hidden');
+    renderDraft();
+  }
+
+  function openDraft(i) {
+    const it = ideas.list[i];
+    if (!it || it.status !== 'ready') return;
+    const t = ideaTemplate(it);
+    draft.idx = i; draft.template = t; draft.design = it.design || null; draft.scheme = it.scheme || null;
+    draft.header = { fields: t.header.fields.slice(), showTotal: t.header.showTotal };
+    draft.items = WS.parseQuick(it.text).items;
+    draft.editing = null; draft.busy = null; draft.history = [];
+    $('draftPurpose').textContent = it.purpose || t.name;
+    $('draftName').textContent = it.title;
+    $('draftInfo').textContent = it.summary;
+    $('draftTitle').value = it.draftTitle || it.title;
+    $('draftInstr').value = it.draftInstr != null ? it.draftInstr : (t.header.instructions || '');
+    $('draftAnswers').checked = false;
+    setDraftView('visual');
+    showDraftView();
+    window.scrollTo(0, 0);
+  }
+
+  function draftTheme() { return Object.assign({}, WS.DEFAULT_THEME, themeOfTemplate(draft.template, draft.design, draft.scheme)); }
+
+  function persistDraft() {
+    const it = ideas.list[draft.idx];
+    if (!it) return;
+    it.text = WS.toQuick(draft.items);
+    it.draftTitle = $('draftTitle').value; it.draftInstr = $('draftInstr').value;
+    it.design = draft.design; it.scheme = draft.scheme;
+    saveIdeas();
+  }
+
+  function pushHistory() {
+    draft.history.push(JSON.stringify(draft.items));
+    if (draft.history.length > 40) draft.history.shift();
+  }
+
+  function draftHeaderHtml(th) {
+    const a = '#' + th.accent, tint = '#' + WS.tint(th.accent, 0.88);
+    const title = esc($('draftTitle').value || 'Worksheet');
+    const subj = TPL.SUBJECTS.find((x) => x.id === ideas.subject);
+    const sub = esc([subj && subj.name, ideas.o.level, ideas.topic].filter(Boolean).join('  ·  ')) || '&nbsp;';
+    let head;
+    switch (th.headerStyle) {
+      case 'banner': head = '<div style="background:' + a + ';color:#fff"><div class="d-title">' + title + '</div><div class="d-sub" style="color:#fff">' + sub + '</div></div>'; break;
+      case 'boxed': head = '<div style="border:2px solid ' + a + ';text-align:center"><div class="d-title" style="color:' + a + '">' + title + '</div><div class="d-sub">' + sub + '</div></div>'; break;
+      case 'stripe': head = '<div style="border-left:6px solid ' + a + ';background:' + tint + '"><div class="d-title" style="color:' + a + '">' + title + '</div><div class="d-sub">' + sub + '</div></div>'; break;
+      case 'minimal': head = '<div style="border-bottom:1px solid ' + a + '"><div class="d-title" style="color:' + a + ';padding-left:0;font-size:15px">' + title + '</div><div class="d-sub" style="padding-left:0">' + sub + '</div></div>'; break;
+      default: head = '<div class="d-title" style="color:' + a + ';padding-left:0">' + title + '</div><div class="d-sub" style="padding-left:0">' + sub + '</div>';
+    }
+    const fields = (draft.header.fields || []).map((f) => '<span>' + esc(f) + ':</span>').join('');
+    const instr = $('draftInstr').value.trim()
+      ? '<div class="d-instr" style="border-color:' + a + ';background:' + tint + '"><b>Instructions:</b> ' + richHtml($('draftInstr').value.trim()) + '</div>' : '';
+    return '<div class="d-head" style="font-family:\'' + th.headingFont + '\',sans-serif">' + head + '<div class="d-fields">' + fields + '</div>' + instr + '</div>';
+  }
+
+  function draftSectionHtml(text, th) {
+    const a = '#' + th.accent, tint = '#' + WS.tint(th.accent, 0.86);
+    const st = th.sectionStyle === 'band' ? 'background:' + tint + ';border-left:3px solid ' + a + ';color:' + a
+      : th.sectionStyle === 'solid' ? 'background:' + a + ';color:#fff'
+        : th.sectionStyle === 'plain' ? 'color:' + a : 'color:' + a + ';border-bottom:1px solid ' + a;
+    return '<div class="d-sec" style="' + st + ";font-family:'" + th.headingFont + "',sans-serif\">" + richHtml(text) + '</div>';
+  }
+
+  const tbtn = (act, i, label, title, cls) => '<button data-act="' + act + '" data-i="' + i + '" title="' + title + '"' + (cls ? ' class="' + cls + '"' : '') + '>' + label + '</button>';
+
+  function renderDraft() {
+    const th = draftTheme();
+    document.documentElement.style.setProperty('--dr-font', "'" + th.bodyFont + "'");
+    designPicker($('draftDesigns'), draft.design || draft.template.design, th.accent, (id) => { draft.design = id; renderDraft(); });
+    schemePicker($('draftSchemes'), th.accent, (id) => { draft.scheme = id; renderDraft(); });
+    const show = $('draftAnswers').checked;
+    let html = draftHeaderHtml(th);
+    let n = 0;
+    draft.items.forEach((it, i) => {
+      let body = '', tools = '';
+      const mv = tbtn('up', i, '↑', 'Move up') + tbtn('down', i, '↓', 'Move down');
+      const del = tbtn('del', i, '✕', 'Delete', 'del');
+      if (draft.editing === i && (it.kind === 'section' || it.kind === 'text' || it.kind === 'check')) {
+        const val = it.kind === 'section' ? it.text : it.kind === 'text' ? it.text : it.items.join('\n');
+        const field = it.kind === 'section' ? '<input data-editfield value="' + esc(val) + '" />' : '<textarea data-editfield rows="' + (it.kind === 'text' ? 7 : 4) + '">' + esc(val) + '</textarea>';
+        html += '<div class="d-item d-edit" data-i="' + i + '">' + (it.kind === 'check' ? '<small>One item per line</small>' : '') + field +
+          '<div class="row"><button class="primary small" data-act="save" data-i="' + i + '">Save</button><button class="secondary small" data-act="cancel" data-i="' + i + '">Cancel</button></div></div>';
+        return;
+      }
+      if (it.kind === 'section') {
+        body = draftSectionHtml(it.text, th);
+        tools = tbtn('more', i, '✨', 'Add 2 AI questions to this section') + tbtn('addq', i, '+', 'Add a question to this section') + tbtn('edit', i, '✎', 'Rename') + mv + del;
+      } else if (it.kind === 'question') {
+        n++;
+        body = previewHtml(it.q, n, { theme: th, show });
+        tools = tbtn('edit', i, '✎', 'Edit in the wizard') + tbtn('regen', i, '↻', 'Rewrite this question with AI') + mv + del;
+      } else if (it.kind === 'text') {
+        body = '<div class="d-text">' + richHtml(it.text) + '</div>';
+        tools = tbtn('edit', i, '✎', 'Edit text') + mv + del;
+      } else if (it.kind === 'check') {
+        body = '<div class="d-check">' + it.items.map((x) => '<div>☐&nbsp; ' + richHtml(x) + '</div>').join('') + '</div>';
+        tools = tbtn('edit', i, '✎', 'Edit items') + mv + del;
+      } else if (it.kind === 'lesson') {
+        body = draftSectionHtml(it.lesson.title, th);
+        tools = mv + del;
+      }
+      html += '<div class="d-item' + (draft.busy === i ? ' d-busy' : '') + '" data-i="' + i + '">' + body + '<div class="d-tools">' + tools + '</div></div>';
+    });
+    if (!draft.items.length) html += '<div class="pv-empty">This worksheet is empty – add a question below.</div>';
+    $('draftVisual').innerHTML = html;
+    const st = quickStats(WS.toQuick(draft.items));
+    $('draftSummary').innerHTML = '<div class="ok">' + st.n + ' questions · ' + st.marks + ' marks</div>';
+    $('draftUndo').classList.toggle('hidden', !draft.history.length);
+    persistDraft();
+  }
+
+  function endOfSection(i) {
+    let j = i + 1;
+    while (j < draft.items.length && draft.items[j].kind !== 'section' && draft.items[j].kind !== 'lesson') j++;
+    return j;
+  }
+  const questionLines = (except) => draft.items.filter((x, k) => x.kind === 'question' && k !== except).map((x) => x.q.text.replace(/\s+/g, ' ').slice(0, 140));
+  const writtenType = (q) => (q.type === 'written' ? ((q.lines || 3) > 5 ? 'long' : 'short') : q.type);
+
+  function saveToDraft(q, ctx) {
+    pushHistory();
+    if (ctx.index != null && draft.items[ctx.index] && draft.items[ctx.index].kind === 'question') {
+      draft.items[ctx.index] = { kind: 'question', q };
+    } else {
+      const at = ctx.after == null ? draft.items.length : endOfSection(ctx.after);
+      draft.items.splice(at, 0, { kind: 'question', q });
+    }
+    wiz.draft = null;
+    resetWizard();
+    showTab('templates');
+    showDraftView();
+    toast('Saved to your worksheet.');
+  }
+
+  async function aiDraftQuestions(sectionIndex) {
+    const p = aiReadyProvider();
+    if (!p) throw new Error('This needs a Claude or Gemini API key (AI ✦ tab).');
+    const section = sectionIndex == null ? 'the worksheet' : draft.items[sectionIndex].text;
+    draft.busy = sectionIndex == null ? -1 : sectionIndex;
+    renderDraft();
+    try {
+      const text = await AI.complete(p, aiCfg(p), AI.moreQuestionsPrompt(ideas.o, section, 2, questionLines(-1)));
+      const qs = WS.parseQuick(AI.cleanOutput(text)).items.filter((x) => x.kind === 'question');
+      if (!qs.length) throw new Error('No questions came back – try again.');
+      pushHistory();
+      const at = sectionIndex == null ? draft.items.length : endOfSection(sectionIndex);
+      draft.items.splice.apply(draft.items, [at, 0].concat(qs));
+      toast(qs.length + ' questions added.');
+    } finally { draft.busy = null; renderDraft(); }
+  }
+
+  async function onDraftAction(act, i) {
+    const it = draft.items[i];
+    if (act === 'up' || act === 'down') {
+      const j = act === 'up' ? i - 1 : i + 1;
+      if (j < 0 || j >= draft.items.length) return;
+      pushHistory();
+      [draft.items[i], draft.items[j]] = [draft.items[j], draft.items[i]];
+    } else if (act === 'del') {
+      pushHistory(); draft.items.splice(i, 1);
+      toast('Removed – use Undo to bring it back.');
+    } else if (act === 'edit') {
+      if (it.kind === 'question') { showTab('wizard'); startWizard(writtenType(it.q), it.q, { index: i }); return; }
+      draft.editing = i;
+    } else if (act === 'cancel') {
+      draft.editing = null;
+    } else if (act === 'save') {
+      const el = $('draftVisual').querySelector('[data-editfield]');
+      const v = el ? el.value : '';
+      pushHistory();
+      if (it.kind === 'section') it.text = v.trim() || it.text;
+      else if (it.kind === 'text') it.text = v.replace(/\s+$/, '');
+      else if (it.kind === 'check') it.items = v.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+      draft.editing = null;
+    } else if (act === 'addq') {
+      wizardPickForDraft({ index: null, after: i }); return;
+    } else if (act === 'more') {
+      await aiDraftQuestions(i); return;
+    } else if (act === 'regen') {
+      const p = aiReadyProvider();
+      if (!p) throw new Error('This needs a Claude or Gemini API key (AI ✦ tab).');
+      draft.busy = i; renderDraft();
+      try {
+        const text = await AI.complete(p, aiCfg(p), AI.replaceQuestionPrompt(ideas.o, WS.questionToQuick(it.q), AI.TYPE_TEXT[it.q.type] || it.q.type, questionLines(i)));
+        const q = WS.parseQuick(AI.cleanOutput(text)).items.find((x) => x.kind === 'question');
+        if (!q) throw new Error('No question came back – try again.');
+        pushHistory();
+        draft.items[i] = q;
+        toast('Question rewritten.');
+      } finally { draft.busy = null; }
+    }
+    renderDraft();
+  }
+
+  $('draftVisual').addEventListener('click', async (e) => {
+    const b = e.target.closest('button[data-act]');
+    if (!b || b.disabled) return;
+    b.disabled = true;
+    try { await onDraftAction(b.dataset.act, +b.dataset.i); } catch (err) { toast(friendlyError(err), true); } finally { b.disabled = false; }
+  });
+
+  function setDraftView(v) {
+    if (v === draft.view && v === 'visual' && !$('draftTextWrap').classList.contains('hidden')) { /* fall through */ }
+    if (v === 'visual' && draft.view === 'text') {
+      const parsed = WS.parseQuick($('draftText').value);
+      if (parsed.errors.length) toast(parsed.errors[0], true);
+      pushHistory();
+      draft.items = parsed.items;
+    }
+    draft.view = v;
+    $('draftView').querySelectorAll('button').forEach((b) => b.classList.toggle('active', b.dataset.v === v));
+    $('draftVisual').classList.toggle('hidden', v !== 'visual');
+    $('draftHint').classList.toggle('hidden', v !== 'visual');
+    $('draftTextWrap').classList.toggle('hidden', v !== 'text');
+    if (v === 'text') $('draftText').value = WS.toQuick(draft.items);
+    else if (draft.idx != null) renderDraft();
+  }
+  $('draftView').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => setDraftView(b.dataset.v)));
+  $('draftAnswers').addEventListener('change', renderDraft);
+  $('draftTitle').addEventListener('input', renderDraft);
+  $('draftInstr').addEventListener('input', renderDraft);
+  $('draftBack').addEventListener('click', () => {
+    if (draft.view === 'text') setDraftView('visual');
+    $('tplDraft').classList.add('hidden'); $('tplBrowse').classList.remove('hidden');
+    draft.idx = null; renderIdeas();
+  });
+  $('draftUndo').addEventListener('click', () => {
+    if (!draft.history.length) return;
+    draft.items = JSON.parse(draft.history.pop());
+    draft.editing = null;
+    renderDraft();
+  });
+  $('draftAdd').addEventListener('click', () => {
+    if (draft.view === 'text') setDraftView('visual');
+    wizardPickForDraft({ index: null, after: null });
+  });
+  guard($('draftAiAdd'), async () => {
+    if (draft.view === 'text') setDraftView('visual');
+    let last = null;
+    draft.items.forEach((x, k) => { if (x.kind === 'section') last = k; });
+    await aiDraftQuestions(last);
+  });
+  $('draftToQuick').addEventListener('click', () => {
+    if (draft.view === 'text') setDraftView('visual');
+    $('quickText').value = WS.toQuick(draft.items); updateQuick(); showTab('quick');
+  });
+  guard($('draftCreate'), async () => {
+    if (draft.view === 'text') setDraftView('visual');
+    if (!needWord()) return;
+    if (!draft.items.length) throw new Error('This worksheet is empty.');
+    const th = draftTheme();
+    theme = Object.assign({}, WS.DEFAULT_THEME, th, { checkboxMode: theme.checkboxMode, design: draft.design || draft.template.design });
+    fillStyleForm();
+    await persist({ theme });
+    await applyStyles();
+    const subj = TPL.SUBJECTS.find((x) => x.id === ideas.subject);
+    const base = readHeader();
+    const h = Object.assign(base, {
+      title: $('draftTitle').value.trim() || ideas.list[draft.idx].title,
+      instructions: $('draftInstr').value.trim(), fields: (draft.header.fields || []).slice(), showTotal: !!draft.header.showTotal,
+      topic: ideas.topic,
+    });
+    if (!h.subject && subj) h.subject = subj.name;
+    if (!h.group && ideas.o.level) h.group = ideas.o.level;
+    fillHeader(h);
+    await insertHeader(h);
+    await insertQuickText(WS.toQuick(draft.items), 'end');
+    await rerenderAll();
+    toast('“' + h.title + '” is now in your document.');
+  });
+
+  // =====================================================================
   //  Pop-out window
   // =====================================================================
   // Task pane: run document requests coming from the pop-out window.
@@ -1302,6 +1728,7 @@
     buildTypeGrid();
     tpl.subject = local.get('tplSubject', 'maths');
     renderTemplates();
+    loadIdeas();
     $('insertAt').value = local.get('insertAt', 'cursor');
     $('quickText').value = local.get('quickDraft', '');
     $('quickText').placeholder = 'Q: What is the capital of France?\n* Paris\n- London\n- Berlin';
