@@ -195,6 +195,8 @@ You can use `**bold**` and `*italic*` anywhere.
 
 ## Good to know
 
+- **An add-in is missing from SHARED FOLDER, shows an old version, or keeps disappearing from the ribbon:** close Word and run `./tools/reset-addin-cache.ps1`. It checks your catalog settings and manifests, then clears Word's add-in cache. Reopen Word, go to **Home → Add-ins → Advanced → SHARED FOLDER**, click **Refresh**, and add each add-in once.
+
 - Each question is a Word **content control**, which shows as a thin box when you click in it. You can move questions around freely, then click **Renumber & update totals**.
 - To change a question, click inside it and choose **Tools → Edit in wizard**. Text you type directly inside a question box is replaced when you switch between the student and teacher copies or apply a new style. Text you type outside the question boxes is never touched.
 - The question data is saved inside the .docx file, so you can reopen and edit a worksheet later, or on another computer.
@@ -216,6 +218,7 @@ examples/            sample worksheets, a lesson pack and the design gallery
 web/taskpane.css     panel look
 server.js            local HTTPS server (npm start)
 tools/set-url.js     makes manifest-hosted.xml for a hosted copy
+tools/reset-addin-cache.ps1  checks your add-in catalogs and clears Word's add-in cache
 push.ps1             creates the GitHub repo, publishes to GitHub Pages, pushes updates
 .github/workflows/   GitHub Actions workflow that publishes the web folder
 ```
