@@ -16,6 +16,39 @@ Every inserted item uses Word styles whose names start with `WS …`, such as `W
 
 ---
 
+## Install it: publish with push.ps1 (Windows, with GitHub CLI)
+
+If you have `git` and the GitHub CLI (`gh auth login` done), one command publishes everything:
+
+```powershell
+cd path\to\worksheet-builder
+Unblock-File .\push.ps1        # first time only – files from a zip are blocked by Windows
+./push.ps1 "first version"
+```
+
+On the first run it:
+- creates a public repository called `worksheet-builder` in your GitHub account;
+- turns on GitHub Pages;
+- pushes the project;
+- waits until the add-in website is live;
+- writes `manifest-hosted.xml` with your site address, ready to add to Word (see step 4 below).
+
+After that, run `./push.ps1 "what you changed"` whenever you edit anything. GitHub re-publishes the add-in automatically, and Word loads the new version the next time you open it.
+
+Options:
+
+| Option | What it does |
+|---|---|
+| `-RepoName name` | Use a different repository name |
+| `-Open` | Open the add-in page in your browser when publishing finishes |
+| `-NoWait` | Don't wait for publishing to finish |
+| `-Force` | Replace what's already in the repository (for example, files you uploaded through the GitHub website) |
+| `-Private` | Make the repository private (GitHub Pages then needs a paid plan) |
+
+If PowerShell says running scripts is disabled, use `powershell -ExecutionPolicy Bypass -File .\push.ps1 "first version"` instead.
+
+Colleagues can download the manifest from `https://YOURNAME.github.io/worksheet-builder/manifest.xml`.
+
 ## Install it: Option 1, try it on your own computer
 
 You need **Node.js**. Install the free "LTS" version from https://nodejs.org.
@@ -30,7 +63,8 @@ You need **Node.js**. Install the free "LTS" version from https://nodejs.org.
    The first time, Windows or macOS asks you to trust a "localhost" development certificate. Click **Yes**. Leave the window open while you use the add-in.
 4. Load the add-in into Word:
    - **Word for Windows or Mac:** open a second terminal in the same folder and run `npm run sideload`. Word opens with the add-in loaded.
-   - **Word on the web (Microsoft 365):** open a document, then go to **Home → Add-ins → More add-ins → My add-ins → Upload my add-in**. Choose `manifest.xml`.
+   - **Word on the web (Microsoft 365):** open a document, then go to **Home → Add-ins → More Settings → Upload My Add-in**. Browse to `manifest.xml` and click **Upload**. This is remembered only in that browser.
+   - **Word for Windows, without the command line:** put the manifest in a folder and share it: right-click the folder, then **Properties → Sharing → Share**, and note the `\\COMPUTER\folder` path. In Word, go to **File → Options → Trust Center → Trust Center Settings → Trusted Add-in Catalogs**. Paste the path, click **Add catalog**, tick **Show in Menu**, click **OK**, and restart Word. Then go to **Home → Add-ins → Advanced → SHARED FOLDER**, pick Worksheet Builder and click **Add**.
    - **Mac, by hand:** copy `manifest.xml` to `~/Library/Containers/com.microsoft.Word/Data/Documents/wef/` (create the `wef` folder if it doesn't exist), then restart Word.
 5. Click **Home → Worksheet Builder**.
 
@@ -182,4 +216,6 @@ examples/            sample worksheets, a lesson pack and the design gallery
 web/taskpane.css     panel look
 server.js            local HTTPS server (npm start)
 tools/set-url.js     makes manifest-hosted.xml for a hosted copy
+push.ps1             creates the GitHub repo, publishes to GitHub Pages, pushes updates
+.github/workflows/   GitHub Actions workflow that publishes the web folder
 ```
