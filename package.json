@@ -1,0 +1,18 @@
+{
+  "name": "worksheet-builder",
+  "version": "1.0.0",
+  "description": "Word add-in for building uniform class worksheets",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "sideload": "office-addin-dev-settings sideload manifest.xml",
+    "unload": "office-addin-dev-settings unregister manifest.xml",
+    "validate": "office-addin-manifest validate manifest.xml",
+    "set-url": "node tools/set-url.js"
+  },
+  "devDependencies": {
+    "office-addin-dev-certs": "^1.13.0",
+    "office-addin-dev-settings": "^2.3.0",
+    "office-addin-manifest": "^1.13.0"
+  }
+}

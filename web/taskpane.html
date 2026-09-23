@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Worksheet Builder</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <link rel="stylesheet" href="taskpane.css" />
+</head>
+<body>
+  <header class="app-head">
+    <div class="brand"><img src="assets/icon-32.png" alt="" /> Worksheet Builder</div>
+    <div class="mode" id="modeBadge" title="Switch between the student and teacher copies in Tools">Student copy</div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="templates" class="active">Templates</button>
+    <button role="tab" data-tab="wizard">Wizard</button>
+    <button role="tab" data-tab="ai">AI ✦</button>
+    <button role="tab" data-tab="quick">Quick</button>
+    <button role="tab" data-tab="header">Header</button>
+    <button role="tab" data-tab="tools">Tools</button>
+    <button role="tab" data-tab="style">Style</button>
+  </nav>
+
+  <div id="banner" class="banner hidden"></div>
+
+  <main>
+    <!-- ============ TEMPLATES ============ -->
+    <section id="tab-templates" class="tab active">
+      <div id="tplBrowse">
+        <h2>Start from a template</h2>
+        <div class="subject-chips" id="subjectChips"></div>
+        <div id="tplList" class="tpl-grid"></div>
+        <h3 class="sub">Works for any subject</h3>
+        <div id="tplGeneral" class="tpl-grid"></div>
+        <h3 class="sub">My templates</h3>
+        <div id="tplMine" class="tpl-grid"></div>
+        <div class="row save-tpl">
+          <input id="tplSaveName" placeholder="Name, e.g. Year 9 quiz" />
+          <button class="secondary small" id="tplSave">Save current look</button>
+        </div>
+        <small>Saves your current style and header as a template for the selected subject.</small>
+      </div>
+
+      <div id="tplDetail" class="hidden">
+        <button class="link" id="tplBack">&larr; All templates</button>
+        <h2 id="tplName"></h2>
+        <p class="muted" id="tplDesc"></p>
+        <div class="tpl-detail-top">
+          <div id="tplPreview" class="tpl-preview"></div>
+          <div id="tplContents" class="tpl-contents"></div>
+        </div>
+        <div class="field">Base design <small>– changes the layout, fonts and shapes</small>
+          <div id="tplDesigns" class="design-grid"></div>
+        </div>
+        <div class="field">Colour scheme
+          <div id="tplSchemes" class="swatches"></div>
+        </div>
+        <label class="field">Worksheet title <input id="tplTitle" /></label>
+        <label class="check"><input type="checkbox" id="tplUseStyle" checked /> Apply this look to the document</label>
+        <label class="check"><input type="checkbox" id="tplUseHeader" checked /> Add the header</label>
+        <label class="check" id="tplStructureRow"><input type="checkbox" id="tplUseStructure" checked /> Add the starting sections</label>
+        <label class="check" id="tplExamplesRow"><input type="checkbox" id="tplUseExamples" /> Include example questions</label>
+        <div class="actions sticky">
+          <button class="primary" id="tplCreate">Create worksheet</button>
+          <button class="secondary" id="tplAi">Write questions with AI →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ WIZARD ============ -->
+    <section id="tab-wizard" class="tab">
+      <div id="wiz-step1">
+        <h2>1 · Choose a question type</h2>
+        <div class="type-grid" id="typeGrid"></div>
+      </div>
+
+      <div id="wiz-step2" class="hidden">
+        <div class="step-head">
+          <button class="link" id="wizBack">&larr; Change type</button>
+          <h2 id="wizTitle">2 · Write the question</h2>
+        </div>
+
+        <label class="field">Question
+          <textarea id="qText" rows="3" placeholder="Type the question…"></textarea>
+          <small id="qTextHelp">Tip: **bold** and *italic* work.</small>
+        </label>
+
+        <!-- options (mc / multi) -->
+        <div id="optBlock" class="block hidden">
+          <div class="block-head"><span>Answer options</span><small id="optHelp">Select the correct answer</small></div>
+          <div id="optList"></div>
+          <div class="row">
+            <button class="secondary small" id="addOpt">+ Add option</button>
+            <label class="check"><input type="checkbox" id="shuffleOpts" /> Shuffle order</label>
+          </div>
+        </div>
+
+        <!-- true / false -->
+        <div id="tfBlock" class="block hidden">
+          <div class="block-head"><span>Correct answer</span></div>
+          <div class="row">
+            <label class="check"><input type="radio" name="tf" value="true" checked /> True</label>
+            <label class="check"><input type="radio" name="tf" value="false" /> False</label>
+          </div>
+        </div>
+
+        <!-- written -->
+        <div id="writtenBlock" class="block hidden">
+          <label class="field">Answer lines
+            <input type="number" id="qLines" min="1" max="40" value="3" />
+          </label>
+          <label class="field">Answer space
+            <select id="qArea"><option value="">Use the worksheet style</option><option value="lines">Writing lines</option><option value="box">Working box</option><option value="grid">Squared grid</option></select>
+          </label>
+          <label class="field">Model answer <small>(shown in the teacher copy and the answer key)</small>
+            <textarea id="qAnswer" rows="3" placeholder="Optional"></textarea>
+          </label>
+        </div>
+
+        <!-- blanks -->
+        <div id="blanksBlock" class="block hidden">
+          <div class="block-head"><span>Blanks found</span></div>
+          <div id="blankChips" class="chips"><small>Put each missing word in [square brackets].</small></div>
+          <label class="check"><input type="checkbox" id="wordBank" /> Add a word bank (answers in a shuffled box)</label>
+        </div>
+
+        <!-- matching -->
+        <div id="matchBlock" class="block hidden">
+          <div class="block-head"><span>Pairs</span><small>Right-hand side is shuffled automatically</small></div>
+          <div id="pairList"></div>
+          <button class="secondary small" id="addPair">+ Add pair</button>
+        </div>
+
+        <div class="row marks-row">
+          <label class="field inline">Marks <input type="number" id="qMarks" min="0" max="50" value="1" /></label>
+          <small id="marksAuto">Worked out automatically – change it if you like.</small>
+        </div>
+
+        <div class="preview-wrap">
+          <div class="block-head"><span>Preview</span></div>
+          <div id="preview" class="preview"></div>
+        </div>
+
+        <div id="wizError" class="error hidden"></div>
+
+        <div class="actions sticky">
+          <button class="primary" id="wizInsertNext">Insert &amp; add another</button>
+          <button class="secondary" id="wizInsert">Insert</button>
+          <button class="secondary hidden" id="wizCancelEdit">Cancel</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ AI ============ -->
+    <section id="tab-ai" class="tab">
+      <h2>Write questions with AI</h2>
+      <label class="field">AI service
+        <select id="aiProvider">
+          <option value="claude">Claude (API key)</option>
+          <option value="gemini">Gemini (API key)</option>
+          <option value="notebooklm">NotebookLM (copy &amp; paste)</option>
+          <option value="chalkie">Chalkie (copy &amp; paste)</option>
+        </select>
+      </label>
+
+      <details class="guide" id="aiConn">
+        <summary id="aiConnSummary">Connection settings</summary>
+        <div id="aiApiSettings">
+          <label class="field">API key
+            <input type="password" id="aiKey" autocomplete="off" spellcheck="false" />
+            <small id="aiKeyHint"></small>
+          </label>
+          <label class="field">Model
+            <div class="row" style="margin:0"><input id="aiModel" list="aiModelList" /><button class="secondary small" id="aiLoadModels">Load models</button></div>
+          </label>
+          <datalist id="aiModelList"></datalist>
+          <div class="row">
+            <button class="secondary small" id="aiSaveKey">Save</button>
+            <button class="secondary small" id="aiTest">Test connection</button>
+            <button class="link" id="aiForget">Forget key</button>
+          </div>
+          <small>Your key is stored only in this browser on this computer and is sent only to the AI service. Usage is billed to your own account.</small>
+        </div>
+        <div id="aiBridgeHelp" class="hidden"><small id="aiBridgeText"></small></div>
+      </details>
+
+      <div class="segmented" id="aiMode">
+        <button data-mode="topic" class="active">From a topic</button>
+        <button data-mode="sow">From a scheme of work</button>
+      </div>
+
+      <label class="field" id="aiTopicRow">Topic <input id="aiTopic" placeholder="e.g. The water cycle" /></label>
+
+      <!-- scheme of work -->
+      <div id="sowPanel" class="hidden">
+        <div class="dropzone" id="sowDrop" tabindex="0">
+          <div class="dz-ico">📄</div>
+          <b>Drop your scheme of work here</b>
+          <small>Word, PDF, PowerPoint, Excel, text or a photo</small>
+          <button class="secondary small" id="sowBrowse">Choose a file…</button>
+          <input type="file" id="sowFileInput" class="hidden" accept=".docx,.docm,.pdf,.pptx,.xlsx,.xlsm,.txt,.md,.csv,.rtf,.htm,.html,.png,.jpg,.jpeg,.webp" />
+        </div>
+        <div id="sowFileCard" class="file-card hidden">
+          <span class="fc-ico">📄</span>
+          <div><b id="sowFileName"></b><small id="sowFileInfo"></small></div>
+          <button class="icon-btn" id="sowFileClear" title="Remove">✕</button>
+        </div>
+        <div id="sowBridgeSteps" class="hidden">
+          <ol class="steps">
+            <li>Add your scheme of work to <span class="bridge-name"></span> as a source (or upload it there).</li>
+            <li>Choose the options below, then press <b>Copy prompt &amp; open</b>.</li>
+            <li>Paste the prompt into its chat. Copy the reply and paste it into the box that appears below.</li>
+          </ol>
+          <label class="field">Only these lessons <small>(optional, e.g. “Lessons 1–4”)</small><input id="sowBridgeFilter" /></label>
+        </div>
+        <div class="actions" id="sowAnalyseRow">
+          <button class="primary" id="sowAnalyse" disabled>Find the lessons</button>
+        </div>
+        <div id="sowOutline" class="hidden">
+          <div class="unit-head">
+            <b id="sowUnit"></b><small id="sowUnitInfo"></small>
+          </div>
+          <div class="row"><button class="link" id="sowAll">Select all</button><button class="link" id="sowNone">Select none</button><small id="sowCount"></small></div>
+          <div id="sowLessons" class="lesson-list"></div>
+        </div>
+      </div>
+
+      <div class="two">
+        <label class="field">Pupils <input id="aiLevel" list="aiLevelList" placeholder="e.g. Year 7" /></label>
+        <label class="field">Questions <input type="number" id="aiCount" min="1" max="40" value="8" /></label>
+      </div>
+      <datalist id="aiLevelList">
+        <option>Year 3</option><option>Year 4</option><option>Year 5</option><option>Year 6</option><option>Year 7</option><option>Year 8</option>
+        <option>Year 9</option><option>GCSE Foundation</option><option>GCSE Higher</option><option>A level</option><option>SEND / lower reading age</option>
+      </datalist>
+      <div class="field">Question types
+        <div class="row wrap" id="aiTypes">
+          <label class="check"><input type="checkbox" value="mc" checked /> Multiple choice</label>
+          <label class="check"><input type="checkbox" value="multi" /> Tick all</label>
+          <label class="check"><input type="checkbox" value="tf" checked /> True/false</label>
+          <label class="check"><input type="checkbox" value="blanks" checked /> Blanks</label>
+          <label class="check"><input type="checkbox" value="match" /> Matching</label>
+          <label class="check"><input type="checkbox" value="written" checked /> Written</label>
+        </div>
+      </div>
+      <label class="field">Difficulty
+        <select id="aiDifficulty">
+          <option value="mixed">Mixed</option>
+          <option value="ramp">Easy → challenge (Parts A, B, C)</option>
+          <option value="easy – for recall and confidence">Easy</option>
+          <option value="secure – typical for this age">Core</option>
+          <option value="challenging – stretch and depth">Challenge</option>
+        </select>
+      </label>
+      <div id="aiSourceBlock">
+        <label class="field">Source material <small>(optional – questions will be based only on this)</small>
+          <textarea id="aiSource" rows="4" placeholder="Paste lesson notes, a text extract or key facts…"></textarea>
+        </label>
+        <div class="row"><button class="link" id="aiUseSelection">Use the text selected in my document</button></div>
+      </div>
+      <label class="field">Anything else? <input id="aiExtra" placeholder="e.g. include one question about evaporation rates" /></label>
+
+      <div class="actions">
+        <button class="primary" id="aiGenerate">Generate questions</button>
+        <button class="secondary hidden" id="sowStop">Stop</button>
+      </div>
+      <div id="sowProgress" class="progress hidden"><div class="bar"><i id="sowBar"></i></div><small id="sowProgressText"></small></div>
+
+      <!-- lesson pack -->
+      <div id="sowPack" class="hidden">
+        <h2>Your lesson pack</h2>
+        <div id="sowPackList" class="lesson-list"></div>
+        <label class="check"><input type="checkbox" id="sowPageBreak" checked /> Start each lesson on a new page</label>
+        <label class="check"><input type="checkbox" id="sowShowLO" checked /> Show learning objectives</label>
+        <label class="check"><input type="checkbox" id="sowShowVocab" checked /> Show key vocabulary</label>
+        <label class="check"><input type="checkbox" id="sowFields" checked /> Name and date lines on every lesson</label>
+        <label class="check"><input type="checkbox" id="sowHeader" checked /> Add a header with the unit title (if there isn’t one)</label>
+        <div class="actions sticky">
+          <button class="primary" id="sowInsertAll">Insert all lessons</button>
+        </div>
+      </div>
+      <p class="muted small">Don’t include pupils’ names or personal details. AI can make mistakes, so check every question and answer before printing.</p>
+
+      <div id="aiPromptWrap" class="hidden">
+        <label class="field">Prompt to copy <textarea id="aiPromptBox" rows="5" readonly class="mono"></textarea></label>
+      </div>
+      <div id="aiResultWrap" class="hidden">
+        <h2 id="aiResultTitle">Review and edit</h2>
+        <small id="aiResultHelp">This uses the Quick build format, so you can edit it before inserting.</small>
+        <textarea id="aiResult" rows="14" spellcheck="false" class="mono"></textarea>
+        <div id="aiSummary" class="summary"></div>
+        <div class="actions sticky">
+          <button class="primary" id="aiInsert" disabled>Insert questions</button>
+          <button class="secondary" id="aiTidy">Tidy into worksheet format</button>
+          <button class="secondary" id="aiToQuick">Open in Quick build</button>
+        </div>
+      </div>
+
+      <h2>Finish off with AI</h2>
+      <div class="tool">
+        <button class="secondary" id="aiAnswers">Write missing model answers</button>
+        <small>Adds mark-scheme answers to written questions in this worksheet that don’t have one yet (Claude or Gemini).</small>
+      </div>
+    </section>
+
+    <!-- ============ QUICK BUILD ============ -->
+    <section id="tab-quick" class="tab">
+      <h2>Build many questions at once</h2>
+      <p class="muted">Type or paste your questions using the simple format below, then insert them all in one go.</p>
+      <textarea id="quickText" rows="14" spellcheck="false"></textarea>
+      <div class="row">
+        <button class="link" id="quickExample">Load an example</button>
+        <button class="link" id="quickClear">Clear</button>
+      </div>
+      <details class="guide">
+        <summary>Format guide</summary>
+        <table>
+          <tr><td><code># Part A</code></td><td>Section heading</td></tr>
+          <tr><td><code>Q: text (2 marks)</code></td><td>New question (also <code>1.</code> or <code>Q1.</code>). Marks optional.</td></tr>
+          <tr><td><code>* right</code><br /><code>- wrong</code></td><td>Options → multiple choice. Two or more <code>*</code> → tick all that apply.</td></tr>
+          <tr><td><code>A: true</code></td><td>True / false question</td></tr>
+          <tr><td><code>The [Sun] is…</code></td><td>Fill in the blanks. Add <code>wordbank: yes</code> for a word bank.</td></tr>
+          <tr><td><code>Dog = Mammal</code></td><td>Matching pairs</td></tr>
+          <tr><td><code>A: model answer</code><br /><code>lines: 6</code></td><td>Written answer with lines</td></tr>
+          <tr><td><code>shuffle: yes</code></td><td>Shuffle multiple-choice options</td></tr>
+        </table>
+      </details>
+      <div id="quickSummary" class="summary"></div>
+      <div class="actions sticky">
+        <button class="primary" id="quickInsert" disabled>Insert questions</button>
+      </div>
+    </section>
+
+    <!-- ============ HEADER ============ -->
+    <section id="tab-header" class="tab">
+      <h2>Worksheet header</h2>
+      <p class="muted">Every worksheet gets the same title block. Save your usual details once.</p>
+      <label class="field">School / department <input id="hSchool" placeholder="e.g. Riverside Academy – Science" /></label>
+      <label class="field">Worksheet title <input id="hTitle" placeholder="e.g. Forces and Motion" /></label>
+      <div class="two">
+        <label class="field">Subject <input id="hSubject" list="subjectList" /></label>
+        <label class="field">Class / year <input id="hGroup" list="groupList" /></label>
+      </div>
+      <datalist id="subjectList"></datalist>
+      <datalist id="groupList"></datalist>
+      <label class="field">Topic / lesson <input id="hTopic" /></label>
+      <div class="field">Student fields
+        <div class="row wrap" id="hFields">
+          <label class="check"><input type="checkbox" value="Name" checked /> Name</label>
+          <label class="check"><input type="checkbox" value="Class" checked /> Class</label>
+          <label class="check"><input type="checkbox" value="Date" checked /> Date</label>
+          <label class="check"><input type="checkbox" value="Teacher" /> Teacher</label>
+          <label class="check"><input type="checkbox" value="Group" /> Group</label>
+        </div>
+      </div>
+      <label class="field">Instructions
+        <select id="hInstrPreset">
+          <option value="">Choose a common instruction…</option>
+          <option>Answer all questions in the spaces provided.</option>
+          <option>Answer all questions. Show your working.</option>
+          <option>Read each question carefully before you answer.</option>
+          <option>Use black or blue pen. Draw diagrams in pencil.</option>
+        </select>
+        <textarea id="hInstructions" rows="2"></textarea>
+      </label>
+      <label class="check"><input type="checkbox" id="hTotal" checked /> Show a total marks box (updates automatically)</label>
+      <label class="check"><input type="checkbox" id="hFooter" checked /> Add footer with title and page numbers</label>
+      <div class="actions sticky">
+        <button class="primary" id="hInsert">Insert / update header</button>
+        <button class="secondary" id="hSave">Save as my default</button>
+      </div>
+    </section>
+
+    <!-- ============ TOOLS ============ -->
+    <section id="tab-tools" class="tab">
+      <h2>Tidy &amp; finish</h2>
+      <div class="tool">
+        <button class="secondary" id="tRefresh">Renumber &amp; update totals</button>
+        <small>Run after moving or deleting questions.</small>
+      </div>
+      <div class="tool">
+        <button class="secondary" id="tKey">Insert / update answer key</button>
+        <small>Added on a new page at the end.</small>
+      </div>
+      <div class="tool two-btn">
+        <button class="secondary" id="tStudent">Student copy</button>
+        <button class="secondary" id="tTeacher">Teacher copy (answers shown)</button>
+      </div>
+
+      <h2>Selected question</h2>
+      <p class="muted">Click inside a question in your document first.</p>
+      <div class="tool two-btn">
+        <button class="secondary" id="tEdit">Edit in wizard</button>
+        <button class="secondary danger" id="tDelete">Delete question</button>
+      </div>
+
+      <h2>Tick boxes</h2>
+      <div class="tool two-btn">
+        <button class="secondary" id="tBox">Insert tick box at cursor</button>
+        <button class="secondary" id="tBoxLines">Add tick boxes to selected lines</button>
+      </div>
+      <label class="field">Checklist / success criteria
+        <input id="tChkTitle" value="Success criteria" />
+        <textarea id="tChkItems" rows="4" placeholder="One item per line, e.g.&#10;I can label the parts of a cell&#10;I can explain what the nucleus does"></textarea>
+      </label>
+      <button class="secondary" id="tChecklist">Insert checklist</button>
+
+      <h2>Layout</h2>
+      <div class="two">
+        <label class="field">Section heading <input id="tSection" placeholder="e.g. Part B – Extension" /></label>
+        <div class="field"><span>&nbsp;</span><button class="secondary" id="tSectionBtn">Insert</button></div>
+      </div>
+      <div class="two">
+        <label class="field">Writing lines <input type="number" id="tLines" value="5" min="1" max="40" /></label>
+        <div class="field"><span>&nbsp;</span><button class="secondary" id="tLinesBtn">Insert</button></div>
+      </div>
+      <label class="field">New content goes
+        <select id="insertAt">
+          <option value="cursor">At the cursor</option>
+          <option value="end">At the end of the document</option>
+        </select>
+      </label>
+    </section>
+
+    <!-- ============ STYLE ============ -->
+    <section id="tab-style" class="tab">
+      <h2>House style</h2>
+      <p class="muted">One look for every worksheet. Pick a base design and a colour scheme, then fine-tune.</p>
+      <div class="field">Base design<div id="styleDesigns" class="design-grid"></div></div>
+      <div class="field">Colour scheme<div id="styleSchemes" class="swatches"></div></div>
+      <div class="two">
+        <label class="field">Body font <input id="sBodyFont" list="fontList" /></label>
+        <label class="field">Heading font <input id="sHeadingFont" list="fontList" /></label>
+      </div>
+      <datalist id="fontList">
+        <option>Arial</option><option>Calibri</option><option>Century Gothic</option><option>Comic Sans MS</option>
+        <option>Verdana</option><option>Tahoma</option><option>Segoe UI</option><option>Aptos</option>
+        <option>Times New Roman</option><option>Georgia</option><option>Sassoon Primary</option><option>OpenDyslexic</option>
+      </datalist>
+      <div class="two">
+        <label class="field">Text size (pt) <input type="number" id="sBaseSize" min="9" max="24" /></label>
+        <label class="field">Accent colour <input type="color" id="sAccent" /></label>
+      </div>
+      <div class="two">
+        <label class="field">Space between questions
+          <select id="sQuestionGap"><option value="8">Compact</option><option value="14">Normal</option><option value="22">Roomy</option></select>
+        </label>
+        <label class="field">Numbering
+          <select id="sNumberFormat"><option value="1.">1.</option><option value="1)">1)</option><option value="Q1">Q1</option><option value="Q1.">Q1.</option></select>
+        </label>
+      </div>
+      <div class="two">
+        <label class="field">Writing line height
+          <select id="sLineHeight"><option value="narrow">Narrow</option><option value="normal">Normal</option><option value="wide">Wide (younger pupils)</option></select>
+        </label>
+        <label class="field">Line style
+          <select id="sLineStyle"><option value="single">Solid</option><option value="dotted">Dotted</option><option value="dashed">Dashed</option></select>
+        </label>
+      </div>
+      <div class="two">
+        <label class="field">Marks
+          <select id="sMarksFormat"><option value="[n]">[2]</option><option value="(n marks)">(2 marks)</option><option value="[n marks]">[2 marks]</option></select>
+        </label>
+        <label class="field">Tick boxes
+          <select id="sCheckboxMode"><option value="clickable">Clickable in Word</option><option value="print">Print only (plain symbol)</option></select>
+        </label>
+      </div>
+      <div class="two">
+        <label class="field">Header
+          <select id="sHeaderStyle"><option value="classic">Classic</option><option value="banner">Colour banner</option><option value="stripe">Side stripe</option><option value="boxed">Framed, centred</option><option value="minimal">Minimal</option></select>
+        </label>
+        <label class="field">Section headings
+          <select id="sSectionStyle"><option value="underline">Underlined</option><option value="band">Shaded band</option><option value="solid">Solid colour</option><option value="plain">Plain</option></select>
+        </label>
+      </div>
+      <div class="two">
+        <label class="field">Questions
+          <select id="sQuestionStyle"><option value="plain">Plain</option><option value="tinted">Tinted strip</option></select>
+        </label>
+        <label class="field">Written answers
+          <select id="sAnswerArea"><option value="lines">Writing lines</option><option value="box">Working box</option><option value="grid">Squared grid</option></select>
+        </label>
+      </div>
+      <label class="check"><input type="checkbox" id="sNumberBadge" /> Question numbers in coloured badges</label>
+      <label class="check"><input type="checkbox" id="sShowMarks" /> Show marks next to each question</label>
+      <label class="check"><input type="checkbox" id="sShowHints" /> Add hints like “Tick one box.”</label>
+      <div class="actions sticky">
+        <button class="primary" id="sApply">Apply to this document</button>
+        <button class="secondary" id="sSave">Save as my default</button>
+      </div>
+      <p class="muted small" id="apiInfo"></p>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden" role="status"></div>
+
+  <script src="vendor/fflate.min.js"></script>
+  <script src="ooxml.js"></script>
+  <script src="docs.js"></script>
+  <script src="ai.js"></script>
+  <script src="templates.js"></script>
+  <script src="taskpane.js"></script>
+</body>
+</html>
